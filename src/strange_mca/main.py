@@ -6,19 +6,15 @@ import logging
 import os
 import sys
 from typing import Dict, List, Optional, Tuple
-
-# Try to load environment variables from .env file
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    logging.warning("dotenv package not found. Environment variables must be set manually.")
+from dotenv import load_dotenv
 
 from src.strange_mca.agents import Agent, create_agent_configs
 from src.strange_mca.graph import create_graph, run_graph
 from src.strange_mca.logging_utils import DetailedLoggingCallbackHandler, setup_detailed_logging
 from src.strange_mca.prompts import update_agent_prompts
 from src.strange_mca.visualization import print_agent_details, print_agent_tree, visualize_agent_graph
+
+load_dotenv()
 
 
 def setup_logging(log_level: str = "warn"):

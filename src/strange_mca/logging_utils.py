@@ -10,16 +10,16 @@ from langchain_core.messages import BaseMessage
 class DetailedLoggingCallbackHandler(BaseCallbackHandler):
     """Callback handler that logs detailed information about LLM calls and node traversal."""
     
-    def __init__(self, verbose: bool = True, log_level: str = "warn"):
+    def __init__(self, debug_max: bool = True, log_level: str = "warn"):
         """Initialize the callback handler.
         
         Args:
-            verbose: Whether to enable verbose output.
+            debug_max: Whether to enable maximum debug output for all callbacks.
             log_level: The level of logging detail using standard Python logging levels: "warn", "info", or "debug".
                        Default is "warn" which shows only warnings and errors.
         """
         super().__init__()
-        self.verbose = verbose
+        self.debug_max = debug_max
         self.log_level = log_level
         self.logger = logging.getLogger("strange_mca")
         
@@ -38,7 +38,7 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs: Any
     ) -> None:
         """Log when a chain starts."""
-        if not self.verbose:
+        if not self.debug_max:
             return
             
         # Extract node name if available
@@ -55,7 +55,7 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         self, outputs: Dict[str, Any], **kwargs: Any
     ) -> None:
         """Log when a chain ends."""
-        if not self.verbose:
+        if not self.debug_max:
             return
             
         # Extract node name if available
@@ -73,7 +73,7 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
     ) -> None:
         """Log when an LLM starts."""
-        if not self.verbose:
+        if not self.debug_max:
             return
             
         # Extract node name if available
@@ -94,7 +94,7 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         self, response: Any, **kwargs: Any
     ) -> None:
         """Log when an LLM ends."""
-        if not self.verbose:
+        if not self.debug_max:
             return
             
         # Extract node name if available
@@ -121,7 +121,7 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         self, serialized: Dict[str, Any], messages: List[List[BaseMessage]], **kwargs: Any
     ) -> None:
         """Log when a chat model starts."""
-        if not self.verbose:
+        if not self.debug_max:
             return
             
         # Extract node name if available
@@ -143,7 +143,7 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         self, response: Any, **kwargs: Any
     ) -> None:
         """Log when a chat model ends."""
-        if not self.verbose:
+        if not self.debug_max:
             return
             
         # Extract node name if available
@@ -170,7 +170,7 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         self, serialized: Dict[str, Any], input_str: str, **kwargs: Any
     ) -> None:
         """Log when a tool starts."""
-        if not self.verbose:
+        if not self.debug_max:
             return
             
         # Extract node name if available
@@ -194,7 +194,7 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         self, output: str, **kwargs: Any
     ) -> None:
         """Log when a tool ends."""
-        if not self.verbose:
+        if not self.debug_max:
             return
             
         # Extract node name if available
@@ -215,7 +215,7 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         self, action: Dict[str, Any], **kwargs: Any
     ) -> None:
         """Log when an agent takes an action."""
-        if not self.verbose:
+        if not self.debug_max:
             return
             
         # Extract node name if available
@@ -241,7 +241,7 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         self, finish: Dict[str, Any], **kwargs: Any
     ) -> None:
         """Log when an agent finishes."""
-        if not self.verbose:
+        if not self.debug_max:
             return
             
         # Extract node name if available

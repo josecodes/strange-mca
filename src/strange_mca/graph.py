@@ -247,6 +247,7 @@ def run_graph(
     context: str = "",
     log_level: str = "warn",
     only_local_logs: bool = False,
+    langgraph_viz_dir: Optional[str] = None,
 ) -> dict:
     """Run the graph on a task.
     
@@ -257,6 +258,7 @@ def run_graph(
         log_level: The level of logging detail using standard Python logging levels: "warn", "info", or "debug".
                   Default is "warn" which shows only warnings and errors.
         only_local_logs: If True, only show logs from the strange_mca logger and suppress logs from other loggers.
+        langgraph_viz_dir: If provided, directory where LangGraph visualization was generated.
         
     Returns:
         The result dictionary containing all responses and the final response.
@@ -272,7 +274,7 @@ def run_graph(
     
     # Set up callbacks with the appropriate log level
     config = {}
-    callback_handler = DetailedLoggingCallbackHandler(verbose=True, log_level=log_level)
+    callback_handler = DetailedLoggingCallbackHandler(debug_max=False, log_level=log_level)
     config["callbacks"] = [callback_handler]
     
     # Set up detailed logging with the appropriate log level
