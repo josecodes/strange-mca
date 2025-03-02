@@ -69,7 +69,7 @@ poetry run python -m src.strange_mca.main
 To customize the configuration:
 
 ```bash
-poetry run python -m src.strange_mca.main --team_size 4 --depth 3
+poetry run python -m src.strange_mca.main --child_per_parent 4 --depth 3
 ```
 
 ### Visualization Options

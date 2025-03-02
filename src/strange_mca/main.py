@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import os
+import sys
 from typing import Dict, List, Optional
 
 # Try to load environment variables from .env file
@@ -14,6 +15,7 @@ except ImportError:
     logging.warning("dotenv package not found. Environment variables must be set manually.")
 
 from src.strange_mca.agents import Agent, create_agent_configs
+from src.strange_mca.graph import create_graph, run_graph
 from src.strange_mca.prompts import update_agent_prompts
 from src.strange_mca.visualization import print_agent_details, print_agent_tree, visualize_agent_graph
 
@@ -29,19 +31,17 @@ def setup_logging():
 def run_multiagent_system(
     task: str,
     context: str = "",
-    team_size: int = 3,
+    child_per_parent: int = 3,
     depth: int = 2,
     model_name: str = "gpt-3.5-turbo",
     verbose: bool = False,
 ) -> tuple[str, Dict[str, str]]:
-    """Run the multiagent system on a task.
-    
-    This is a simplified implementation that doesn't use LangGraph.
+    """Run the multiagent system on a task using LangGraph.
     
     Args:
         task: The task to perform.
         context: The context for the task.
-        team_size: The number of children each non-leaf node has.
+        child_per_parent: The number of children each non-leaf node has.
         depth: The number of levels in the tree.
         model_name: The name of the LLM model to use.
         verbose: Whether to enable verbose output.
@@ -49,56 +49,63 @@ def run_multiagent_system(
     Returns:
         A tuple containing the final response and a dictionary of all agent responses.
     """
-    # Create agent configurations
-    agent_configs = create_agent_configs(team_size, depth)
-    
-    # Update agent prompts
-    agent_configs = update_agent_prompts(agent_configs, team_size, depth)
-    
-    # Create agents
-    agents = {name: Agent(config, model_name) for name, config in agent_configs.items()}
-    
-    # Process the task through the tree
-    responses = {}
-    
-    # Start with the root node
-    root_name = "L1N1"
-    root_agent = agents[root_name]
-    
-    # Get the children of the root
-    children = agent_configs[root_name].children
-    
-    # Process each child
-    for child_name in children:
-        child_agent = agents[child_name]
-        child_response = child_agent.run(context=context, task=task)
-        responses[child_name] = child_response
-        logging.info(f"Agent {child_name} response: {child_response[:50]}...")
-    
-    # Create the synthesis task for the root
-    child_responses = "\n\n".join([
-        f"{child}: {responses[child]}"
-        for child in children
-    ])
-    synthesis_task = (
-        f"Synthesize the following responses from your team members:\n\n"
-        f"{child_responses}"
-    )
-    
-    # Get the final response from the root
-    final_response = root_agent.run(context=context, task=synthesis_task)
-    
-    # Add the final response to the responses dictionary
-    responses[root_name] = final_response
-    
-    return final_response, responses
+    try:
+        # Create agent configurations
+        agent_configs = create_agent_configs(child_per_parent, depth)
+        
+        # Update agent prompts
+        agent_configs = update_agent_prompts(agent_configs, child_per_parent, depth)
+        
+        # Create the LangGraph
+        graph = create_graph(child_per_parent, depth, model_name)
+        
+        # Run the graph
+        final_response = run_graph(graph, task, context)
+        
+        # For compatibility with the verbose output, we need to collect all responses
+        # Create agents to access their responses
+        agents = {name: Agent(config, model_name) for name, config in agent_configs.items()}
+        
+        # Process each child agent to get their responses for verbose output
+        responses = {}
+        root_name = "L1N1"
+        children = agent_configs[root_name].children
+        
+        for child_name in children:
+            child_agent = agents[child_name]
+            child_response = child_agent.run(context=context, task=task)
+            responses[child_name] = child_response
+            if verbose:
+                logging.info(f"Agent {child_name} response: {child_response[:50]}...")
+        
+        # Add the final response to the responses dictionary
+        responses[root_name] = final_response
+        
+        return final_response, responses
+        
+    except Exception as e:
+        logging.error(f"Error running multiagent system: {e}")
+        if "openai.error.AuthenticationError" in str(e) or "openai.AuthenticationError" in str(e):
+            print("\nError: OpenAI API key is invalid or not set correctly.")
+            print("Please check your .env file and ensure OPENAI_API_KEY is set properly.")
+            print("You can find your API key at https://platform.openai.com/account/api-keys")
+        elif "openai.error.RateLimitError" in str(e) or "openai.RateLimitError" in str(e):
+            print("\nError: OpenAI API rate limit exceeded.")
+            print("Possible solutions:")
+            print("1. Check your billing status at https://platform.openai.com/account/billing")
+            print("2. Use a different API key")
+            print("3. Try again later")
+            print("4. Upgrade your OpenAI plan")
+        else:
+            print(f"\nError: {e}")
+        sys.exit(1)
 
 
 def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Run the multiagent system.")
     parser.add_argument(
-        "--team_size",
+        "--child_per_parent",
         type=int,
         default=3,
         help="The number of children each non-leaf node has.",
@@ -176,19 +183,19 @@ def main():
     args = parse_args()
     
     # Log configuration
-    logging.info(f"Running with team_size={args.team_size}, depth={args.depth}")
+    logging.info(f"Running with child_per_parent={args.child_per_parent}, depth={args.depth}")
     logging.info(f"Using model: {args.model}")
     logging.info(f"Task: {args.task}")
     
     # Calculate the total number of agents
-    total_agents = sum(args.team_size ** (i - 1) for i in range(1, args.depth + 1))
+    total_agents = sum(args.child_per_parent ** (i - 1) for i in range(1, args.depth + 1))
     logging.info(f"Total agents: {total_agents}")
     
     # Create agent configurations
-    agent_configs = create_agent_configs(args.team_size, args.depth)
+    agent_configs = create_agent_configs(args.child_per_parent, args.depth)
     
     # Update agent prompts
-    agent_configs = update_agent_prompts(agent_configs, args.team_size, args.depth)
+    agent_configs = update_agent_prompts(agent_configs, args.child_per_parent, args.depth)
     
     # Print the agent tree if requested
     if args.print_tree:
@@ -217,7 +224,7 @@ def main():
         final_response, all_responses = run_multiagent_system(
             task=args.task,
             context=args.context,
-            team_size=args.team_size,
+            child_per_parent=args.child_per_parent,
             depth=args.depth,
             model_name=args.model,
             verbose=args.verbose,

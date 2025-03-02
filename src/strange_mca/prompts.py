@@ -3,56 +3,59 @@
 from typing import Dict, List
 
 
-def get_supervisor_prompt(team_size: int, depth: int) -> str:
+def get_supervisor_prompt(child_per_parent: int, depth: int) -> str:
     """Get the system prompt for the supervisor agent.
     
     Args:
-        team_size: The number of children each non-leaf node has.
+        child_per_parent: The number of children each non-leaf node has.
         depth: The number of levels in the tree.
         
     Returns:
-        The system prompt.
+        The system prompt for the supervisor agent.
     """
-    child_names = [f"L2N{i}" for i in range(1, team_size + 1)]
+    # Generate a list of child names
+    child_names = [f"L2N{i}" for i in range(1, child_per_parent + 1)]
     child_list = ", ".join(child_names)
     
     return (
-        f"You are the supervisor agent (L1N1) responsible for coordinating a team of {team_size} agents: {child_list}. "
-        "Your role is to break down complex tasks into simpler subtasks and assign them to your team members. "
-        "You will receive their responses and synthesize a final answer. "
-        "You should consider the strengths and specialties of each team member when assigning tasks."
+        f"You are the supervisor agent (L1N1) responsible for coordinating a team of {child_per_parent} agents: {child_list}. "
+        "Your role is to break down complex tasks into simpler subtasks and assign them "
+        "to your team members. You will receive their responses and synthesize a final answer."
     )
 
 
-def get_team_member_prompts(team_size: int) -> Dict[str, str]:
-    """Get system prompts for team members.
+def get_team_member_prompts(child_per_parent: int) -> Dict[str, str]:
+    """Get the system prompts for team member agents.
     
     Args:
-        team_size: The number of team members.
+        child_per_parent: The number of team members.
         
     Returns:
         A dictionary mapping agent names to their system prompts.
     """
-    specialties = {
-        1: "research and information gathering",
-        2: "critical analysis and evaluation",
-        3: "creative problem-solving and innovation",
-        4: "technical implementation and execution",
-        5: "communication and explanation",
-        6: "planning and organization",
-        7: "risk assessment and mitigation",
-        8: "ethical considerations and implications",
-        9: "user experience and design",
+    prompts = {}
+    
+    # Define specialized roles based on the agent's position
+    specializations = {
+        1: "analyzing complex concepts and breaking them down into simpler terms",
+        2: "providing detailed explanations with examples",
+        3: "connecting ideas to real-world applications",
+        4: "evaluating different perspectives and providing balanced views",
+        5: "researching historical context and development of ideas",
+        6: "identifying potential challenges and limitations",
+        7: "proposing innovative solutions and future directions",
+        8: "summarizing and synthesizing information concisely",
+        9: "explaining technical concepts to non-experts",
     }
     
-    prompts = {}
-    for i in range(1, min(team_size + 1, 10)):
-        specialty = specialties.get(i, "general problem-solving")
+    # Create prompts for each team member
+    for i in range(1, min(child_per_parent + 1, 10)):
+        specialization = specializations.get(i, "providing expert analysis and insights")
         prompts[f"L2N{i}"] = (
-            f"You are agent L2N{i}, a specialized agent working as part of a team under the supervision of L1N1. "
-            f"Your specialty is {specialty}. "
-            "You will receive tasks from your supervisor and should complete them to the best of your ability, "
-            f"focusing on your expertise in {specialty}."
+            f"You are agent L2N{i}, a specialized agent working as part of a team. "
+            "Your parent agent is L1N1. "
+            f"You excel at {specialization}. "
+            "You will receive tasks from your parent and should complete them to the best of your ability."
         )
     
     return prompts
@@ -60,14 +63,14 @@ def get_team_member_prompts(team_size: int) -> Dict[str, str]:
 
 def update_agent_prompts(
     agent_configs: Dict[str, "AgentConfig"],
-    team_size: int,
+    child_per_parent: int,
     depth: int,
 ) -> Dict[str, "AgentConfig"]:
-    """Update agent prompts with more specific system prompts.
+    """Update the system prompts for all agents.
     
     Args:
         agent_configs: The agent configurations to update.
-        team_size: The number of children each non-leaf node has.
+        child_per_parent: The number of children each non-leaf node has.
         depth: The number of levels in the tree.
         
     Returns:
@@ -76,12 +79,16 @@ def update_agent_prompts(
     # Import here to avoid circular imports
     from src.strange_mca.agents import AgentConfig
     
+    # Get the supervisor prompt
+    supervisor_prompt = get_supervisor_prompt(child_per_parent, depth)
+    
     # Update the supervisor prompt
-    supervisor_prompt = get_supervisor_prompt(team_size, depth)
     agent_configs["L1N1"].system_prompt = supervisor_prompt
     
+    # Get team member prompts
+    team_member_prompts = get_team_member_prompts(child_per_parent)
+    
     # Update team member prompts
-    team_member_prompts = get_team_member_prompts(team_size)
     for name, prompt in team_member_prompts.items():
         if name in agent_configs:
             agent_configs[name].system_prompt = prompt

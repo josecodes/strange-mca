@@ -74,11 +74,11 @@ class Agent:
         return f"Agent({self.config.full_name})"
 
 
-def create_agent_configs(team_size: int, depth: int) -> Dict[str, AgentConfig]:
+def create_agent_configs(child_per_parent: int, depth: int) -> Dict[str, AgentConfig]:
     """Create agent configurations for a tree with the given parameters.
     
     Args:
-        team_size: The number of children each non-leaf node has.
+        child_per_parent: The number of children each non-leaf node has.
         depth: The number of levels in the tree.
         
     Returns:
@@ -103,13 +103,13 @@ def create_agent_configs(team_size: int, depth: int) -> Dict[str, AgentConfig]:
     # Create the rest of the tree
     for level in range(2, depth + 1):
         parent_level = level - 1
-        parent_count = team_size ** (parent_level - 1)
+        parent_count = child_per_parent ** (parent_level - 1)
         
         for parent_idx in range(1, parent_count + 1):
             parent_name = f"L{parent_level}N{parent_idx}"
             
-            for child_idx in range(1, team_size + 1):
-                node_number = ((parent_idx - 1) * team_size) + child_idx
+            for child_idx in range(1, child_per_parent + 1):
+                node_number = ((parent_idx - 1) * child_per_parent) + child_idx
                 child_name = f"L{level}N{node_number}"
                 
                 child_config = AgentConfig(
