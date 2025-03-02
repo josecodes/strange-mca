@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 # Try to load environment variables from .env file
 try:
@@ -16,14 +16,30 @@ except ImportError:
 
 from src.strange_mca.agents import Agent, create_agent_configs
 from src.strange_mca.graph import create_graph, run_graph
+from src.strange_mca.logging_utils import DetailedLoggingCallbackHandler, setup_detailed_logging
 from src.strange_mca.prompts import update_agent_prompts
 from src.strange_mca.visualization import print_agent_details, print_agent_tree, visualize_agent_graph
 
 
-def setup_logging():
-    """Set up logging for the application."""
+def setup_logging(log_level: str = "warn"):
+    """Set up logging for the application.
+    
+    Args:
+        log_level: The level of logging detail using standard Python logging levels: "warn", "info", or "debug".
+                  Default is "warn" which shows only warnings and errors.
+    """
+    # Map string log levels to Python logging levels
+    log_level_map = {
+        "warn": logging.WARNING,
+        "info": logging.INFO,
+        "debug": logging.DEBUG
+    }
+    
+    # Determine the actual logging level to use
+    actual_level = log_level_map.get(log_level, logging.WARNING)
+    
     logging.basicConfig(
-        level=logging.INFO,
+        level=actual_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
@@ -35,6 +51,7 @@ def run_multiagent_system(
     depth: int = 2,
     model_name: str = "gpt-3.5-turbo",
     verbose: bool = False,
+    log_level: str = "warn",
 ) -> tuple[str, Dict[str, str]]:
     """Run the multiagent system on a task using LangGraph.
     
@@ -45,11 +62,16 @@ def run_multiagent_system(
         depth: The number of levels in the tree.
         model_name: The name of the LLM model to use.
         verbose: Whether to enable verbose output.
+        log_level: The level of logging detail using standard Python logging levels: "warn", "info", or "debug".
+                  Default is "warn" which shows only warnings and errors.
         
     Returns:
         A tuple containing the final response and a dictionary of all agent responses.
     """
     try:
+        # Set up detailed logging
+        setup_detailed_logging(log_level=log_level)
+            
         # Create agent configurations
         agent_configs = create_agent_configs(child_per_parent, depth)
         
@@ -59,27 +81,28 @@ def run_multiagent_system(
         # Create the LangGraph
         graph = create_graph(child_per_parent, depth, model_name)
         
-        # Run the graph
-        final_response = run_graph(graph, task, context)
+        # Run the graph with the appropriate log level
+        result = run_graph(
+            graph=graph,
+            task=task,
+            context=context,
+            log_level=log_level
+        )
         
-        # For compatibility with the verbose output, we need to collect all responses
-        # Create agents to access their responses
-        agents = {name: Agent(config, model_name) for name, config in agent_configs.items()}
+        # Get all responses from the graph
+        responses = result["responses"]
         
-        # Process each child agent to get their responses for verbose output
-        responses = {}
-        root_name = "L1N1"
-        children = agent_configs[root_name].children
+        # Get the final response - prefer the final_response field if it exists
+        final_response = result.get("final_response", "")
+        if not final_response:
+            # Fall back to the L1N1 response if no final_response is available
+            final_response = responses.get("L1N1", "No response available")
         
-        for child_name in children:
-            child_agent = agents[child_name]
-            child_response = child_agent.run(context=context, task=task)
-            responses[child_name] = child_response
-            if verbose:
-                logging.info(f"Agent {child_name} response: {child_response[:50]}...")
-        
-        # Add the final response to the responses dictionary
-        responses[root_name] = final_response
+        # Log responses if verbose
+        if verbose:
+            for agent_name, response in responses.items():
+                if agent_name != "L1N1":  # Skip the root node since we'll show it as the final response
+                    logging.debug(f"Agent {agent_name} response: {response[:50]}...")
         
         return final_response, responses
         
@@ -171,25 +194,32 @@ def parse_args():
         action="store_true",
         help="Enable verbose output with full agent responses.",
     )
+    parser.add_argument(
+        "--log_level",
+        type=str,
+        choices=["warn", "info", "debug"],
+        default="warn",
+        help="The level of logging detail to display using standard Python logging levels. Default is 'warn'.",
+    )
     return parser.parse_args()
 
 
 def main():
     """Run the main function."""
-    # Set up logging
-    setup_logging()
-    
     # Parse arguments
     args = parse_args()
     
+    # Set up logging with the specified log level
+    setup_logging(log_level=args.log_level)
+    
     # Log configuration
-    logging.info(f"Running with child_per_parent={args.child_per_parent}, depth={args.depth}")
-    logging.info(f"Using model: {args.model}")
-    logging.info(f"Task: {args.task}")
+    logging.debug(f"Running with child_per_parent={args.child_per_parent}, depth={args.depth}")
+    logging.debug(f"Using model: {args.model}")
+    logging.debug(f"Task: {args.task}")
     
     # Calculate the total number of agents
     total_agents = sum(args.child_per_parent ** (i - 1) for i in range(1, args.depth + 1))
-    logging.info(f"Total agents: {total_agents}")
+    logging.debug(f"Total agents: {total_agents}")
     
     # Create agent configurations
     agent_configs = create_agent_configs(args.child_per_parent, args.depth)
@@ -215,12 +245,12 @@ def main():
             format=args.format,
         )
         if output_file:
-            logging.info(f"Visualization saved to {output_file}")
+            logging.debug(f"Visualization saved to {output_file}")
     
     # Run the system if not a dry run
     if not args.dry_run:
         # Run the system
-        logging.info("Running the multiagent system...")
+        logging.debug("Running the multiagent system...")
         final_response, all_responses = run_multiagent_system(
             task=args.task,
             context=args.context,
@@ -228,6 +258,7 @@ def main():
             depth=args.depth,
             model_name=args.model,
             verbose=args.verbose,
+            log_level=args.log_level,
         )
         
         # Print the response

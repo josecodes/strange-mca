@@ -1,11 +1,16 @@
 """LangGraph implementation of the multiagent system."""
 
-from typing import Annotated, Dict, List, TypedDict, Literal, Any, cast
+from typing import Dict, List, TypedDict, Annotated, Literal, Any, cast, Optional
+import logging
 
-from langgraph.graph import END, StateGraph
+from langchain_core.runnables import RunnableConfig
+from langgraph.graph import StateGraph, END
 
 from src.strange_mca.agents import Agent, AgentConfig, create_agent_configs
+from src.strange_mca.logging_utils import DetailedLoggingCallbackHandler
 
+# Set up logging
+logger = logging.getLogger("strange_mca")
 
 # Define a custom reducer for the responses dictionary
 def responses_reducer(current_dict: Dict[str, str], update: Dict[str, str]) -> Dict[str, str]:
@@ -61,10 +66,45 @@ def process_agent(
         The updated state.
     """
     # Get the agent's response
-    response = agent.run(context=state["context"], task=state["task"])
+    task = state["task"]
+    context = state["context"]
+    current_agent = state["current_agent"]
     
-    # Return updates to the state - using a dictionary for responses
-    return {"responses": {agent.config.full_name: response}}
+    # Log the task for debugging (only if not too verbose)
+    if task.startswith("Synthesize"):
+        logger.debug(f"[{current_agent}] Processing synthesis task")
+    else:
+        logger.debug(f"[{current_agent}] Processing task")
+    
+    # Check if this is a synthesis task for a parent node
+    is_synthesis = task.startswith("Synthesize the following responses")
+    
+    # Get the agent's response
+    response = agent.run(context=context, task=task)
+    
+    # Create a copy of the current responses
+    updated_responses = state["responses"].copy()
+    
+    # Update the responses dictionary with the new response
+    # Use both the current_agent and the agent's full_name as keys
+    # This ensures we can find the response by either the node name or the agent name
+    updated_responses[current_agent] = response
+    updated_responses[agent.config.full_name] = response
+    
+    # Log the updated responses (simplified)
+    logger.debug(f"[{current_agent}] Updated responses: {list(updated_responses.keys())}")
+    
+    # If this is a synthesis task and the agent is the top-level node (no parent),
+    # this is the final synthesized response
+    if is_synthesis and agent.config.parent is None:
+        logger.debug(f"[{current_agent}] Completed synthesis for top-level node")
+        return {
+            "responses": updated_responses,
+            "final_response": response
+        }
+    
+    # Otherwise, just update the responses
+    return {"responses": updated_responses}
 
 
 def create_graph(
@@ -80,7 +120,7 @@ def create_graph(
         model_name: The name of the LLM model to use.
         
     Returns:
-        A compiled LangGraph.
+        The compiled graph.
     """
     # Create agent configurations
     agent_configs = create_agent_configs(child_per_parent, depth)
@@ -93,7 +133,62 @@ def create_graph(
     
     # Add nodes for each agent
     for name, agent in agents.items():
+        # Log the node name for debugging (simplified)
+        logger.debug(f"[GRAPH] Adding node {name} to the graph")
         graph_builder.add_node(name, lambda state, agent=agent: process_agent(state, agent))
+    
+    # Add a special node for synthesis
+    def synthesize_responses(state: MCAState) -> dict:
+        """Synthesize responses from child nodes."""
+        # Get the root node and its children
+        root_name = "L1N1"
+        children = agent_configs[root_name].children
+        
+        # Check if all children have processed
+        all_processed = True
+        for child in children:
+            if child not in state["responses"]:
+                all_processed = False
+                break
+        
+        if all_processed:
+            logger.debug(f"[SYNTHESIZE] Creating synthesis task from child responses")
+            
+            # Create the synthesis task for the parent
+            child_responses = "\n\n".join([
+                f"{child}: {state['responses'][child]}"
+                for child in children
+            ])
+            synthesis_task = (
+                f"Synthesize the following responses from your team members:\n\n"
+                f"{child_responses}"
+            )
+            
+            # Get the root agent
+            root_agent = agents[root_name]
+            
+            # Get the synthesized response
+            response = root_agent.run(context=state["context"], task=synthesis_task)
+            
+            # Update the responses dictionary
+            updated_responses = state["responses"].copy()
+            updated_responses[root_name] = response
+            
+            # Return the updated state
+            return {
+                "responses": updated_responses,
+                "final_response": response
+            }
+        
+        # Log which children have not processed yet (debug level)
+        missing_children = [child for child in children if child not in state["responses"]]
+        logger.debug(f"[SYNTHESIZE] Waiting for child responses: {missing_children}")
+        
+        # Return the state unchanged
+        return {}
+    
+    # Add the synthesis node
+    graph_builder.add_node("synthesize", synthesize_responses)
     
     # Add edges based on the tree structure
     for name, config in agent_configs.items():
@@ -101,37 +196,31 @@ def create_graph(
             # This is a parent node
             # Add edges from parent to children
             for child_name in config.children:
+                logger.debug(f"[GRAPH] Adding edge from {name} to {child_name}")
                 graph_builder.add_edge(name, child_name)
             
-            # Add conditional edge from the last child back to parent
+            # Add edge from the last child to the synthesis node
             last_child = config.children[-1]
-            parent_name = name  # Store the parent name for use in the closure
+            logger.debug(f"[GRAPH] Adding edge from {last_child} to synthesize")
+            graph_builder.add_edge(last_child, "synthesize")
             
-            # Define a condition to route back to parent after all children have processed
-            def route_to_parent(state: MCAState, parent=parent_name, children=config.children) -> str:
-                # Check if all children have processed
-                if all(child in state["responses"] for child in children):
-                    # Create the synthesis task for the parent
-                    child_responses = "\n\n".join([
-                        f"{child}: {state['responses'][child]}"
-                        for child in children
-                    ])
-                    synthesis_task = (
-                        f"Synthesize the following responses from your team members:\n\n"
-                        f"{child_responses}"
-                    )
-                    # Return a dictionary with the updated task
-                    return {"task": synthesis_task, "__return__": parent}
-                return END
-            
-            # Add conditional edges
-            graph_builder.add_conditional_edges(
-                last_child,
-                route_to_parent
-            )
+            # Add edge from the synthesis node to END
+            logger.debug(f"[GRAPH] Adding edge from synthesize to END")
+            graph_builder.add_edge("synthesize", END)
         else:
-            # This is a leaf node, add edge to END
-            graph_builder.add_edge(name, END)
+            # This is a leaf node with no children
+            # If it's not the last child of its parent, add edge to END
+            # Otherwise, the edge to the synthesis node is already added
+            parent = config.parent
+            if parent:
+                parent_children = agent_configs[parent].children
+                if name != parent_children[-1]:
+                    logger.debug(f"[GRAPH] Adding edge from {name} to END")
+                    graph_builder.add_edge(name, END)
+            else:
+                # This is a leaf node with no parent, add edge to END
+                logger.debug(f"[GRAPH] Adding edge from {name} to END")
+                graph_builder.add_edge(name, END)
     
     # Set the entry point
     graph_builder.set_entry_point("L1N1")
@@ -146,16 +235,19 @@ def run_graph(
     graph,
     task: str,
     context: str = "",
-) -> str:
+    log_level: str = "warn",
+) -> dict:
     """Run the graph on a task.
     
     Args:
         graph: The compiled graph to run.
         task: The task to perform.
         context: The context for the task.
+        log_level: The level of logging detail using standard Python logging levels: "warn", "info", or "debug".
+                  Default is "warn" which shows only warnings and errors.
         
     Returns:
-        The final response.
+        The result dictionary containing all responses and the final response.
     """
     # Create the initial state
     state = {
@@ -166,8 +258,13 @@ def run_graph(
         "final_response": "",
     }
     
-    # Run the graph
-    result = graph.invoke(state)
+    # Set up callbacks with the appropriate log level
+    config = {}
+    callback_handler = DetailedLoggingCallbackHandler(verbose=True, log_level=log_level)
+    config["callbacks"] = [callback_handler]
     
-    # Return the final response
-    return result["responses"]["L1N1"] 
+    # Run the graph
+    result = graph.invoke(state, config=config)
+    
+    # Return the entire result
+    return result 
