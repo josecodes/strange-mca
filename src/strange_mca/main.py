@@ -52,6 +52,7 @@ def run_multiagent_system(
     model_name: str = "gpt-3.5-turbo",
     verbose: bool = False,
     log_level: str = "warn",
+    only_local_logs: bool = False,
 ) -> tuple[str, Dict[str, str]]:
     """Run the multiagent system on a task using LangGraph.
     
@@ -64,13 +65,14 @@ def run_multiagent_system(
         verbose: Whether to enable verbose output.
         log_level: The level of logging detail using standard Python logging levels: "warn", "info", or "debug".
                   Default is "warn" which shows only warnings and errors.
+        only_local_logs: If True, only show logs from the strange_mca logger and suppress logs from other loggers.
         
     Returns:
         A tuple containing the final response and a dictionary of all agent responses.
     """
     try:
         # Set up detailed logging
-        setup_detailed_logging(log_level=log_level)
+        setup_detailed_logging(log_level=log_level, only_local_logs=only_local_logs)
             
         # Create agent configurations
         agent_configs = create_agent_configs(child_per_parent, depth)
@@ -86,7 +88,8 @@ def run_multiagent_system(
             graph=graph,
             task=task,
             context=context,
-            log_level=log_level
+            log_level=log_level,
+            only_local_logs=only_local_logs
         )
         
         # Get all responses from the graph
@@ -201,6 +204,11 @@ def parse_args():
         default="warn",
         help="The level of logging detail to display using standard Python logging levels. Default is 'warn'.",
     )
+    parser.add_argument(
+        "--only_local_logs",
+        action="store_true",
+        help="Only show logs from the strange_mca logger and suppress logs from other loggers.",
+    )
     return parser.parse_args()
 
 
@@ -259,6 +267,7 @@ def main():
             model_name=args.model,
             verbose=args.verbose,
             log_level=args.log_level,
+            only_local_logs=args.only_local_logs,
         )
         
         # Print the response
