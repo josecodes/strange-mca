@@ -4,9 +4,9 @@ import argparse
 import logging
 from typing import Dict, List, Optional
 
-from strange_mca.agents import Agent, create_agent_configs
-from strange_mca.prompts import update_agent_prompts
-from strange_mca.visualization import print_agent_details, print_agent_tree, visualize_agent_graph
+from src.strange_mca.agents import Agent, create_agent_configs
+from src.strange_mca.prompts import update_agent_prompts
+from src.strange_mca.visualization import print_agent_details, print_agent_tree, visualize_agent_graph
 
 
 def setup_logging():

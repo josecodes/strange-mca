@@ -5,7 +5,7 @@ from typing import Annotated, Dict, List, TypedDict
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel
 
-from strange_mca.agents import Agent, AgentConfig, create_agent_configs
+from src.strange_mca.agents import Agent, AgentConfig, create_agent_configs
 
 
 class AgentInput(TypedDict):

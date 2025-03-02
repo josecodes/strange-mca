@@ -74,7 +74,7 @@ def update_agent_prompts(
         The updated agent configurations.
     """
     # Import here to avoid circular imports
-    from strange_mca.agents import AgentConfig
+    from src.strange_mca.agents import AgentConfig
     
     # Update the supervisor prompt
     supervisor_prompt = get_supervisor_prompt(team_size, depth)

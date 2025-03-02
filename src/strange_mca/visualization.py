@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 import graphviz
 
-from strange_mca.agents import AgentConfig
+from src.strange_mca.agents import AgentConfig
 
 
 def visualize_agent_graph(
