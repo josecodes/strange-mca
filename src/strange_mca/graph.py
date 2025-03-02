@@ -22,7 +22,7 @@ def responses_reducer(current_dict: Dict[str, str], update: Dict[str, str]) -> D
     return result
 
 
-class MCAState(TypedDict):
+class State(TypedDict):
     """State of the multiagent graph."""
     
     # The current task being processed
@@ -42,7 +42,7 @@ class MCAState(TypedDict):
 
 
 def process_agent(
-    state: MCAState,
+    state: State,
     agent: Agent,
 ) -> dict:
     """Process an agent in the graph.
@@ -119,7 +119,7 @@ def create_graph(
     agents = {name: Agent(config, model_name) for name, config in agent_configs.items()}
     
     # Create the graph
-    graph_builder = StateGraph(MCAState)
+    graph_builder = StateGraph(State)
     
     # Add nodes for each agent
     for name, agent in agents.items():
@@ -128,7 +128,7 @@ def create_graph(
         graph_builder.add_node(name, lambda state, agent=agent: process_agent(state, agent))
     
     # Add a special node for synthesis
-    def synthesize_responses(state: MCAState) -> dict:
+    def synthesize_responses(state: State) -> dict:
         """Synthesize responses from child nodes."""
         # Get the root node and its children
         root_name = "L1N1"
