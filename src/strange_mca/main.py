@@ -1,6 +1,7 @@
 """Main module for the Strange MCA package."""
 
 import argparse
+import json
 import logging
 import os
 from typing import Dict, List, Optional
@@ -31,7 +32,8 @@ def run_multiagent_system(
     team_size: int = 3,
     depth: int = 2,
     model_name: str = "gpt-3.5-turbo",
-) -> str:
+    verbose: bool = False,
+) -> tuple[str, Dict[str, str]]:
     """Run the multiagent system on a task.
     
     This is a simplified implementation that doesn't use LangGraph.
@@ -42,9 +44,10 @@ def run_multiagent_system(
         team_size: The number of children each non-leaf node has.
         depth: The number of levels in the tree.
         model_name: The name of the LLM model to use.
+        verbose: Whether to enable verbose output.
         
     Returns:
-        The final response.
+        A tuple containing the final response and a dictionary of all agent responses.
     """
     # Create agent configurations
     agent_configs = create_agent_configs(team_size, depth)
@@ -85,7 +88,10 @@ def run_multiagent_system(
     # Get the final response from the root
     final_response = root_agent.run(context=context, task=synthesis_task)
     
-    return final_response
+    # Add the final response to the responses dictionary
+    responses[root_name] = final_response
+    
+    return final_response, responses
 
 
 def parse_args():
@@ -153,6 +159,11 @@ def parse_args():
         action="store_true",
         help="Don't run the system, just show the configuration.",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose output with full agent responses.",
+    )
     return parser.parse_args()
 
 
@@ -203,20 +214,32 @@ def main():
     if not args.dry_run:
         # Run the system
         logging.info("Running the multiagent system...")
-        response = run_multiagent_system(
+        final_response, all_responses = run_multiagent_system(
             task=args.task,
             context=args.context,
             team_size=args.team_size,
             depth=args.depth,
             model_name=args.model,
+            verbose=args.verbose,
         )
         
         # Print the response
         print("\n" + "=" * 80)
         print("FINAL RESPONSE:")
         print("=" * 80)
-        print(response)
+        print(final_response)
         print("=" * 80)
+        
+        # Print all agent responses if verbose mode is enabled
+        if args.verbose:
+            print("\n" + "=" * 80)
+            print("ALL AGENT RESPONSES:")
+            print("=" * 80)
+            for agent_name, response in all_responses.items():
+                print(f"\n--- {agent_name} ---")
+                print(response)
+                print("-" * 40)
+            print("=" * 80)
 
 
 if __name__ == "__main__":
