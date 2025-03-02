@@ -7,7 +7,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
 
 from src.strange_mca.agents import Agent, AgentConfig, create_agent_configs
-from src.strange_mca.logging_utils import DetailedLoggingCallbackHandler
+from src.strange_mca.logging_utils import DetailedLoggingCallbackHandler, setup_detailed_logging
 
 # Set up logging
 logger = logging.getLogger("strange_mca")
@@ -236,6 +236,7 @@ def run_graph(
     task: str,
     context: str = "",
     log_level: str = "warn",
+    only_local_logs: bool = False,
 ) -> dict:
     """Run the graph on a task.
     
@@ -245,6 +246,7 @@ def run_graph(
         context: The context for the task.
         log_level: The level of logging detail using standard Python logging levels: "warn", "info", or "debug".
                   Default is "warn" which shows only warnings and errors.
+        only_local_logs: If True, only show logs from the strange_mca logger and suppress logs from other loggers.
         
     Returns:
         The result dictionary containing all responses and the final response.
@@ -262,6 +264,9 @@ def run_graph(
     config = {}
     callback_handler = DetailedLoggingCallbackHandler(verbose=True, log_level=log_level)
     config["callbacks"] = [callback_handler]
+    
+    # Set up detailed logging with the appropriate log level
+    setup_detailed_logging(log_level=log_level, only_local_logs=only_local_logs)
     
     # Run the graph
     result = graph.invoke(state, config=config)

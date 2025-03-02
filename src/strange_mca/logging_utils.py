@@ -265,13 +265,14 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
             self.logger.debug(f"[AGENT_FINISH:{node_name}] Output: {output_preview}")
 
 
-def setup_detailed_logging(level: int = None, log_level: str = "warn") -> None:
+def setup_detailed_logging(level: int = None, log_level: str = "warn", only_local_logs: bool = False) -> None:
     """Set up detailed logging for the application.
     
     Args:
         level: The logging level to use (if specified, overrides log_level).
         log_level: The level of logging detail using standard Python logging levels: "warn", "info", or "debug".
                    Default is "warn" which shows only warnings and errors.
+        only_local_logs: If True, only show logs from the strange_mca logger and suppress logs from other loggers.
     """
     # Map string log levels to Python logging levels
     log_level_map = {
@@ -294,7 +295,11 @@ def setup_detailed_logging(level: int = None, log_level: str = "warn") -> None:
     
     # Set the level for all existing loggers
     for logger_name in logging.root.manager.loggerDict:
-        logging.getLogger(logger_name).setLevel(actual_level)
+        if only_local_logs and logger_name != "strange_mca" and not logger_name.startswith("strange_mca."):
+            # If only_local_logs is True, set other loggers to a higher level to suppress their output
+            logging.getLogger(logger_name).setLevel(logging.ERROR)
+        else:
+            logging.getLogger(logger_name).setLevel(actual_level)
     
     # Create a logger for the strange_mca package
     logger = logging.getLogger("strange_mca")
