@@ -83,13 +83,12 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         run_id = str(kwargs.get("run_id", "unknown"))
         run_id_short = run_id[:8] if len(run_id) > 8 else run_id
         
-        # Log at debug level (only shown in detailed mode)
-        self.logger.debug(f"[LLM_START:{node_name}] LLM call started (run_id: {run_id_short})")
+
+        self.logger.info(f"[LLM_START:{node_name}] LLM call started (run_id: {run_id_short})")
         
-        # Log prompts at debug level
         if prompts:
             prompt_preview = prompts[0][:30] + "..." if len(prompts[0]) > 30 else prompts[0]
-            self.logger.debug(f"[LLM_START:{node_name}] Prompt: {prompt_preview}")
+            self.logger.info(f"[LLM_START:{node_name}] Prompt: {prompt_preview}")
     
     def on_llm_end(
         self, response: Any, **kwargs: Any
@@ -116,7 +115,7 @@ class DetailedLoggingCallbackHandler(BaseCallbackHandler):
         content_preview = content[:30] + "..." if len(content) > 30 else content
         
         # Log at debug level (only shown in detailed mode)
-        self.logger.debug(f"[LLM_END:{node_name}] LLM response (run_id: {run_id_short}): {content_preview}")
+        self.logger.info(f"[LLM_END:{node_name}] LLM response (run_id: {run_id_short}): {content_preview}")
     
     def on_chat_model_start(
         self, serialized: Dict[str, Any], messages: List[List[BaseMessage]], **kwargs: Any

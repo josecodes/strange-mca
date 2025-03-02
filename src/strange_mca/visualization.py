@@ -10,7 +10,7 @@ from src.strange_mca.agents import AgentConfig
 
 def visualize_agent_graph(
     agent_configs: Dict[str, AgentConfig],
-    output_path: str = "viz_outputs/agent_graph",
+    output_path: str = None,
     format: str = "png",
 ) -> Optional[str]:
     """Visualize the agent graph.

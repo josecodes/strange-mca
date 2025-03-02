@@ -3,6 +3,7 @@
 from typing import Dict, List, TypedDict, Annotated, Literal, Any, cast, Optional
 import logging
 import json
+import os
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
@@ -97,6 +98,7 @@ def create_graph(
     child_per_parent: int = 3,
     depth: int = 2,
     model_name: str = "gpt-3.5-turbo",
+    langgraph_viz_dir: Optional[str] = None,
 ):
     """Create a LangGraph for the multiagent system.
     
@@ -104,6 +106,8 @@ def create_graph(
         child_per_parent: The number of children each non-leaf node has.
         depth: The number of levels in the tree.
         model_name: The name of the LLM model to use.
+        langgraph_viz_dir: If provided, generate a visualization of the LangGraph structure
+                          in this directory. If None, no visualization is generated.
         
     Returns:
         The compiled graph.
@@ -214,15 +218,26 @@ def create_graph(
     # Compile the graph
     compiled_graph = graph_builder.compile()
     
-    # Print the graph structure for debugging
-    try:
-        # Try to get the graph structure
-        graph_dict = graph_builder.__dict__
-        logger.debug(f"LangGraph nodes: {graph_dict.get('nodes', {}).keys()}")
-        logger.debug(f"LangGraph edges: {graph_dict.get('edges', {})}")
-    except Exception as e:
-        logger.debug(f"Could not print graph structure: {e}")
-    
+
+    graph_dict = graph_builder.__dict__
+    logger.debug(f"LangGraph nodes: {graph_dict.get('nodes', {}).keys()}")
+    logger.debug(f"LangGraph edges: {graph_dict.get('edges', {})}")
+
+    if langgraph_viz_dir:
+        # Create directory if it doesn't exist
+        os.makedirs(langgraph_viz_dir, exist_ok=True)
+        
+        # Create langgraph-specific output path
+        lg_viz_path = os.path.join(langgraph_viz_dir, "langgraph_structure")
+        
+        try:
+            png_data = compiled_graph.get_graph().draw_mermaid_png()
+            with open(f"{lg_viz_path}.png", "wb") as f:
+                f.write(png_data)
+            logger.debug(f"LangGraph visualization saved to {lg_viz_path}.png")
+        except Exception as e:
+            logger.warn(f"Could not generate graph visualization: {e}")
+
     return compiled_graph
 
 

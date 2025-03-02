@@ -53,6 +53,7 @@ def run_multiagent_system(
     verbose: bool = False,
     log_level: str = "warn",
     only_local_logs: bool = False,
+    langgraph_viz_dir: Optional[str] = None,
 ) -> tuple[str, Dict[str, str]]:
     """Run the multiagent system on a task using LangGraph.
     
@@ -66,6 +67,7 @@ def run_multiagent_system(
         log_level: The level of logging detail using standard Python logging levels: "warn", "info", or "debug".
                   Default is "warn" which shows only warnings and errors.
         only_local_logs: If True, only show logs from the strange_mca logger and suppress logs from other loggers.
+        langgraph_viz_dir: If provided, directory where to generate LangGraph visualization.
         
     Returns:
         A tuple containing the final response and a dictionary of all agent responses.
@@ -81,7 +83,12 @@ def run_multiagent_system(
         agent_configs = update_agent_prompts(agent_configs, child_per_parent, depth)
         
         # Create the LangGraph
-        graph = create_graph(child_per_parent, depth, model_name)
+        graph = create_graph(
+            child_per_parent=child_per_parent, 
+            depth=depth, 
+            model_name=model_name, 
+            langgraph_viz_dir=langgraph_viz_dir
+        )
         
         # Run the graph with the appropriate log level
         result = run_graph(
@@ -161,7 +168,7 @@ def parse_args():
         help="The context for the task.",
     )
     parser.add_argument(
-        "--visualize",
+        "--viz",
         action="store_true",
         help="Visualize the agent graph.",
     )
@@ -246,14 +253,21 @@ def main():
         print()
     
     # Visualize the agent graph if requested
-    if args.visualize:
+    if args.viz:
+        # Generate agent configuration visualization
         output_file = visualize_agent_graph(
             agent_configs,
             output_path=args.output,
             format=args.format,
         )
         if output_file:
-            logging.debug(f"Visualization saved to {output_file}")
+            logging.debug(f"Agent configuration visualization saved to {output_file}")
+        
+        # Set directory for LangGraph visualization
+        langgraph_viz_dir = os.path.dirname(args.output)
+
+    else:
+        langgraph_viz_dir = None
     
     # Run the system if not a dry run
     if not args.dry_run:
@@ -268,6 +282,7 @@ def main():
             verbose=args.verbose,
             log_level=args.log_level,
             only_local_logs=args.only_local_logs,
+            langgraph_viz_dir=langgraph_viz_dir,
         )
         
         # Print the response
