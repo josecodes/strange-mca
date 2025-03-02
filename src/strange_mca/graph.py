@@ -2,6 +2,7 @@
 
 from typing import Dict, List, TypedDict, Annotated, Literal, Any, cast, Optional
 import logging
+import json
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
@@ -18,19 +19,6 @@ def responses_reducer(current_dict: Dict[str, str], update: Dict[str, str]) -> D
     result = current_dict.copy()
     result.update(update)
     return result
-
-
-class AgentInput(TypedDict):
-    """Input for an agent in the graph."""
-    
-    context: str
-    task: str
-
-
-class AgentOutput(TypedDict):
-    """Output from an agent in the graph."""
-    
-    response: str
 
 
 class MCAState(TypedDict):
@@ -65,12 +53,10 @@ def process_agent(
     Returns:
         The updated state.
     """
-    # Get the agent's response
     task = state["task"]
     context = state["context"]
     current_agent = state["current_agent"]
     
-    # Log the task for debugging (only if not too verbose)
     if task.startswith("Synthesize"):
         logger.debug(f"[{current_agent}] Processing synthesis task")
     else:
@@ -227,6 +213,15 @@ def create_graph(
     
     # Compile the graph
     compiled_graph = graph_builder.compile()
+    
+    # Print the graph structure for debugging
+    try:
+        # Try to get the graph structure
+        graph_dict = graph_builder.__dict__
+        logger.debug(f"LangGraph nodes: {graph_dict.get('nodes', {}).keys()}")
+        logger.debug(f"LangGraph edges: {graph_dict.get('edges', {})}")
+    except Exception as e:
+        logger.debug(f"Could not print graph structure: {e}")
     
     return compiled_graph
 
