@@ -41,6 +41,28 @@ class State(TypedDict):
     final_response: str
 
 
+def create_task_decomposition_prompt(task: str, system_prompt: str) -> str:
+    """Create a prompt for task decomposition.
+    
+    Args:
+        task: The original task to decompose.
+        system_prompt: The system prompt of the agent that will decompose the task.
+        
+    Returns:
+        A prompt for task decomposition.
+    """
+    return f"""Based on your system prompt:
+
+{system_prompt}
+
+Your task is to break down the following task into subtasks for your team members:
+
+TASK: {task}
+
+Please decompose this task into clear, focused subtasks that your team members can work on.
+"""
+
+
 def process_agent(
     state: State,
     agent: Agent,
@@ -58,13 +80,21 @@ def process_agent(
     context = state["context"]
     current_agent = state["current_agent"]
     
-    if task.startswith("Synthesize"):
-        logger.debug(f"[{current_agent}] Processing synthesis task")
-    else:
-        logger.debug(f"[{current_agent}] Processing task")
-    
-    # Check if this is a synthesis task for a parent node
+    # Determine if this is a downward (task decomposition) or upward (synthesis) pass
     is_synthesis = task.startswith("Synthesize the following responses")
+    
+    if is_synthesis:
+        logger.debug(f"[{current_agent}] Processing synthesis task (upward pass)")
+    else:
+        # Check if this is a non-leaf node that needs to decompose the task
+        if agent.config.children:
+            logger.debug(f"[{current_agent}] Processing task decomposition (downward pass)")
+            # Create a task decomposition prompt
+            decomposition_prompt = create_task_decomposition_prompt(task, agent.config.system_prompt)
+            # Run the agent with the decomposition prompt
+            task = decomposition_prompt
+        else:
+            logger.debug(f"[{current_agent}] Processing leaf node task (downward pass)")
     
     # Get the agent's response
     response = agent.run(context=context, task=task)
@@ -81,16 +111,15 @@ def process_agent(
     # Log the updated responses (simplified)
     logger.debug(f"[{current_agent}] Updated responses: {list(updated_responses.keys())}")
     
-    # If this is a synthesis task and the agent is the top-level node (no parent),
-    # this is the final synthesized response
+    # If this is a synthesis task for the root node, set the final response
     if is_synthesis and agent.config.parent is None:
-        logger.debug(f"[{current_agent}] Completed synthesis for top-level node")
+        logger.debug(f"[{current_agent}] Completed synthesis for root node")
         return {
             "responses": updated_responses,
             "final_response": response
         }
     
-    # Otherwise, just update the responses
+    # For all other cases, just update the responses
     return {"responses": updated_responses}
 
 
@@ -112,6 +141,12 @@ def create_graph(
     Returns:
         The compiled graph.
     """
+    # Log the creation of the bidirectional traversal graph
+    logger.info("Creating Tree with Bidirectional Graph Traversal")
+    logger.info(f"Tree structure: {child_per_parent} children per parent, {depth} levels deep")
+    logger.info("Downward pass: Task decomposition from parent nodes to children")
+    logger.info("Upward pass: Response synthesis from children to parent nodes")
+    
     # Create agent configurations
     agent_configs = create_agent_configs(child_per_parent, depth)
     
@@ -127,90 +162,94 @@ def create_graph(
         logger.debug(f"[GRAPH] Adding node {name} to the graph")
         graph_builder.add_node(name, lambda state, agent=agent: process_agent(state, agent))
     
-    # Add a special node for synthesis
-    def synthesize_responses(state: State) -> dict:
-        """Synthesize responses from child nodes."""
-        # Get the root node and its children
-        root_name = "L1N1"
-        children = agent_configs[root_name].children
-        
-        # Check if all children have processed
-        all_processed = True
-        for child in children:
-            if child not in state["responses"]:
-                all_processed = False
-                break
-        
-        if all_processed:
-            logger.debug(f"[SYNTHESIZE] Creating synthesis task from child responses")
+    # Create synthesis nodes for each non-leaf node
+    for name, config in agent_configs.items():
+        if config.children:
+            # This is a non-leaf node, create a synthesis node for it
+            synthesis_node_name = f"synthesize_{name}"
             
-            # Create the synthesis task for the parent
-            child_responses = "\n\n".join([
-                f"{child}: {state['responses'][child]}"
-                for child in children
-            ])
-            synthesis_task = (
-                f"Synthesize the following responses from your team members:\n\n"
-                f"{child_responses}"
-            )
+            # Create a synthesis function for this node
+            def create_synthesis_function(parent_name, children_names):
+                def synthesize_responses(state: State) -> dict:
+                    """Synthesize responses from child nodes for a specific parent."""
+                    # Check if all children have processed
+                    all_processed = True
+                    for child in children_names:
+                        if child not in state["responses"]:
+                            all_processed = False
+                            break
+                    
+                    if all_processed:
+                        logger.debug(f"[SYNTHESIZE:{parent_name}] Creating synthesis task from child responses")
+                        
+                        # Create the synthesis task for the parent
+                        child_responses = "\n\n".join([
+                            f"{child}: {state['responses'][child]}"
+                            for child in children_names
+                        ])
+                        synthesis_task = (
+                            f"Synthesize the following responses from your team members:\n\n"
+                            f"{child_responses}"
+                        )
+                        
+                        # Update the state for the next node (the parent)
+                        return {
+                            "task": synthesis_task,
+                            "current_agent": parent_name
+                        }
+                    
+                    # Log which children have not processed yet (debug level)
+                    missing_children = [child for child in children_names if child not in state["responses"]]
+                    logger.debug(f"[SYNTHESIZE:{parent_name}] Waiting for child responses: {missing_children}")
+                    
+                    # Return the state unchanged
+                    return {}
+                
+                return synthesize_responses
             
-            # Get the root agent
-            root_agent = agents[root_name]
-            
-            # Get the synthesized response
-            response = root_agent.run(context=state["context"], task=synthesis_task)
-            
-            # Update the responses dictionary
-            updated_responses = state["responses"].copy()
-            updated_responses[root_name] = response
-            
-            # Return the updated state
-            return {
-                "responses": updated_responses,
-                "final_response": response
-            }
-        
-        # Log which children have not processed yet (debug level)
-        missing_children = [child for child in children if child not in state["responses"]]
-        logger.debug(f"[SYNTHESIZE] Waiting for child responses: {missing_children}")
-        
-        # Return the state unchanged
-        return {}
-    
-    # Add the synthesis node
-    graph_builder.add_node("synthesize", synthesize_responses)
+            # Add the synthesis node with the created function
+            synthesis_function = create_synthesis_function(name, config.children)
+            graph_builder.add_node(synthesis_node_name, synthesis_function)
+            logger.debug(f"[GRAPH] Adding synthesis node {synthesis_node_name} for parent {name}")
     
     # Add edges based on the tree structure
     for name, config in agent_configs.items():
         if config.children:
             # This is a parent node
-            # Add edges from parent to children
+            # Add edges from parent to children (downward pass)
             for child_name in config.children:
-                logger.debug(f"[GRAPH] Adding edge from {name} to {child_name}")
+                logger.debug(f"[GRAPH] Adding edge from {name} to {child_name} (downward pass)")
                 graph_builder.add_edge(name, child_name)
             
-            # Add edge from the last child to the synthesis node
-            last_child = config.children[-1]
-            logger.debug(f"[GRAPH] Adding edge from {last_child} to synthesize")
-            graph_builder.add_edge(last_child, "synthesize")
+            # Add edges from children to synthesis node (upward pass preparation)
+            synthesis_node_name = f"synthesize_{name}"
+            for child_name in config.children:
+                # If the child is a leaf node, connect directly to synthesis
+                if not agent_configs[child_name].children:
+                    logger.debug(f"[GRAPH] Adding edge from {child_name} to {synthesis_node_name} (upward pass)")
+                    graph_builder.add_edge(child_name, synthesis_node_name)
+                else:
+                    # If the child is not a leaf, connect its synthesis node to this synthesis node
+                    child_synthesis_node = f"synthesize_{child_name}"
+                    logger.debug(f"[GRAPH] Adding edge from {child_synthesis_node} to {synthesis_node_name} (upward pass)")
+                    graph_builder.add_edge(child_synthesis_node, synthesis_node_name)
             
-            # Add edge from the synthesis node to END
-            logger.debug(f"[GRAPH] Adding edge from synthesize to END")
-            graph_builder.add_edge("synthesize", END)
+            # If this is the root node, connect synthesis node directly to END
+            if config.parent is None:
+                logger.debug(f"[GRAPH] Adding edge from {synthesis_node_name} to END (final response)")
+                graph_builder.add_edge(synthesis_node_name, END)
+                
+                # Add edge from root node to END for the case when it processes a synthesis task
+                logger.debug(f"[GRAPH] Adding edge from {name} to END (root node final response)")
+                graph_builder.add_edge(name, END)
+            else:
+                # For non-root nodes, add edge from synthesis node to parent (upward pass completion)
+                logger.debug(f"[GRAPH] Adding edge from {synthesis_node_name} to {name} (upward pass completion)")
+                graph_builder.add_edge(synthesis_node_name, name)
         else:
             # This is a leaf node with no children
-            # If it's not the last child of its parent, add edge to END
-            # Otherwise, the edge to the synthesis node is already added
-            parent = config.parent
-            if parent:
-                parent_children = agent_configs[parent].children
-                if name != parent_children[-1]:
-                    logger.debug(f"[GRAPH] Adding edge from {name} to END")
-                    graph_builder.add_edge(name, END)
-            else:
-                # This is a leaf node with no parent, add edge to END
-                logger.debug(f"[GRAPH] Adding edge from {name} to END")
-                graph_builder.add_edge(name, END)
+            # No additional edges needed as they're already connected to synthesis nodes
+            pass
     
     # Set the entry point
     graph_builder.set_entry_point("L1N1")
@@ -218,7 +257,6 @@ def create_graph(
     # Compile the graph
     compiled_graph = graph_builder.compile()
     
-
     graph_dict = graph_builder.__dict__
     logger.debug(f"LangGraph nodes: {graph_dict.get('nodes', {}).keys()}")
     logger.debug(f"LangGraph edges: {graph_dict.get('edges', {})}")
@@ -248,6 +286,7 @@ def run_graph(
     log_level: str = "warn",
     only_local_logs: bool = False,
     langgraph_viz_dir: Optional[str] = None,
+
 ) -> dict:
     """Run the graph on a task.
     
@@ -259,15 +298,17 @@ def run_graph(
                   Default is "warn" which shows only warnings and errors.
         only_local_logs: If True, only show logs from the strange_mca logger and suppress logs from other loggers.
         langgraph_viz_dir: If provided, directory where LangGraph visualization was generated.
+
         
     Returns:
         The result dictionary containing all responses and the final response.
     """
-    # Create the initial state
+    # Create the initial state with the root node as the starting point
+    # The graph will handle the bidirectional traversal based on its structure
     state = {
         "task": task,
         "context": context,
-        "current_agent": "L1N1",
+        "current_agent": "L1N1",  # Start with the root node
         "responses": {},
         "final_response": "",
     }
