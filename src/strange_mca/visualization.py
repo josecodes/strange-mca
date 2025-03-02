@@ -10,7 +10,7 @@ from src.strange_mca.agents import AgentConfig
 
 def visualize_agent_graph(
     agent_configs: Dict[str, AgentConfig],
-    output_path: str = "agent_graph",
+    output_path: str = "viz_outputs/agent_graph",
     format: str = "png",
 ) -> Optional[str]:
     """Visualize the agent graph.
@@ -23,6 +23,9 @@ def visualize_agent_graph(
     Returns:
         The path to the saved visualization.
     """
+    # Ensure the viz_outputs directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
     # Create a new graph
     dot = graphviz.Digraph(
         "Agent Graph",

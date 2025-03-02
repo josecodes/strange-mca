@@ -63,4 +63,9 @@ poetry.lock
 .idea/
 .vscode/
 *.swp
-*.swo 
+*.swo
+
+# Visualization outputs
+viz_outputs/
+*.png
+*.dot 

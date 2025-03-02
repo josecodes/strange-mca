@@ -1,6 +1,6 @@
 # Strange MCA
 
-A multiagent system built with LangGraph that implements a configurable tree-like graph structure.
+A multiagent system built with LangChain that implements a configurable tree-like structure.
 
 ## Project Overview
 
@@ -31,6 +31,19 @@ For visualization support, install the optional dependencies:
 poetry install --with viz
 ```
 
+### Setting up OpenAI API Key
+
+This project uses OpenAI's API for the language models. You need to set up your API key:
+
+1. Copy the `.env.example` file to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit the `.env` file and replace `your_openai_api_key_here` with your actual OpenAI API key.
+
+3. The application will automatically load this key when it runs.
+
 ## Development
 
 Activate the virtual environment:
@@ -50,13 +63,13 @@ poetry run pytest
 To run the multiagent system with default configuration (X=3, Y=2):
 
 ```bash
-poetry run python -m strange_mca.main
+poetry run python -m src.strange_mca.main
 ```
 
 To customize the configuration:
 
 ```bash
-poetry run python -m strange_mca.main --team_size 4 --depth 3
+poetry run python -m src.strange_mca.main --team_size 4 --depth 3
 ```
 
 ### Visualization Options
@@ -64,25 +77,25 @@ poetry run python -m strange_mca.main --team_size 4 --depth 3
 Print the agent tree structure:
 
 ```bash
-poetry run python -m strange_mca.main --print_tree
+poetry run python -m src.strange_mca.main --print_tree
 ```
 
 Print detailed information about each agent:
 
 ```bash
-poetry run python -m strange_mca.main --print_details
+poetry run python -m src.strange_mca.main --print_details
 ```
 
 Generate a visual graph representation (requires graphviz):
 
 ```bash
-poetry run python -m strange_mca.main --visualize --output agent_graph --format png
+poetry run python -m src.strange_mca.main --visualize --output viz_outputs/agent_graph --format png
 ```
 
 Run a dry run (only show configuration without executing the agents):
 
 ```bash
-poetry run python -m strange_mca.main --dry_run --print_tree
+poetry run python -m src.strange_mca.main --dry_run --print_tree
 ```
 
 ### Example Agent Tree (X=3, Y=2)

@@ -2,7 +2,15 @@
 
 import argparse
 import logging
+import os
 from typing import Dict, List, Optional
+
+# Try to load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    logging.warning("dotenv package not found. Environment variables must be set manually.")
 
 from src.strange_mca.agents import Agent, create_agent_configs
 from src.strange_mca.prompts import update_agent_prompts
@@ -121,7 +129,7 @@ def parse_args():
     parser.add_argument(
         "--output",
         type=str,
-        default="agent_graph",
+        default="viz_outputs/agent_graph",
         help="The path to save the visualization.",
     )
     parser.add_argument(

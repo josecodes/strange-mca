@@ -8,11 +8,11 @@ packages = [{include = "strange_mca", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-langgraph = "^0.1.11"
-langchain = "^0.0.335"
+langchain = "^0.1.0"
 langchain-openai = "^0.0.5"
 pydantic = "^2.5.2"
 graphviz = "^0.20.1"
+python-dotenv = "^1.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
