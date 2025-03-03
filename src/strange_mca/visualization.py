@@ -103,5 +103,5 @@ def print_agent_details(agent_configs: Dict[str, AgentConfig]) -> None:
         print(f"Node Number: {config.node_number}")
         print(f"Parent: {config.parent or 'None'}")
         print(f"Children: {', '.join(config.children) or 'None'}")
-        print(f"System Prompt: {config.system_prompt[:100]}...")
+        print(f"System Prompt: {config.system_prompt}")
         print("-" * 80) 

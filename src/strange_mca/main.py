@@ -114,20 +114,7 @@ def run_multiagent_system(
         
     except Exception as e:
         logging.error(f"Error running multiagent system: {e}")
-        if "openai.error.AuthenticationError" in str(e) or "openai.AuthenticationError" in str(e):
-            print("\nError: OpenAI API key is invalid or not set correctly.")
-            print("Please check your .env file and ensure OPENAI_API_KEY is set properly.")
-            print("You can find your API key at https://platform.openai.com/account/api-keys")
-        elif "openai.error.RateLimitError" in str(e) or "openai.RateLimitError" in str(e):
-            print("\nError: OpenAI API rate limit exceeded.")
-            print("Possible solutions:")
-            print("1. Check your billing status at https://platform.openai.com/account/billing")
-            print("2. Use a different API key")
-            print("3. Try again later")
-            print("4. Upgrade your OpenAI plan")
-        else:
-            print(f"\nError: {e}")
-        sys.exit(1)
+
 
 
 def parse_args():
@@ -174,12 +161,7 @@ def parse_args():
         default="viz_outputs/agent_graph",
         help="The path to save the visualization.",
     )
-    parser.add_argument(
-        "--format",
-        type=str,
-        default="png",
-        help="The format to save the visualization in.",
-    )
+
     parser.add_argument(
         "--print_tree",
         action="store_true",
@@ -254,7 +236,7 @@ def main():
         output_file = visualize_agent_graph(
             agent_configs,
             output_path=args.output,
-            format=args.format,
+            format="png",
         )
         if output_file:
             logging.debug(f"Agent configuration visualization saved to {output_file}")

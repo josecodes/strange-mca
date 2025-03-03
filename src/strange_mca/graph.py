@@ -191,7 +191,7 @@ def create_graph(
                             f"Synthesize the following responses from your team members:\n\n"
                             f"{child_responses}"
                         )
-                        
+                        logger.debug(f"[SYNTHESIZE:{parent_name}] Synthesis task: {synthesis_task}")
                         # Update the state for the next node (the parent)
                         return {
                             "task": synthesis_task,
@@ -314,15 +314,15 @@ def run_graph(
     }
     
     # Set up callbacks with the appropriate log level
-    config = {}
+    invoke_config = {}
     callback_handler = DetailedLoggingCallbackHandler(debug_max=False, log_level=log_level)
-    config["callbacks"] = [callback_handler]
+    invoke_config["callbacks"] = [callback_handler]
     
     # Set up detailed logging with the appropriate log level
     setup_detailed_logging(log_level=log_level, only_local_logs=only_local_logs)
     
     # Run the graph
-    result = graph.invoke(state, config=config)
+    result = graph.invoke(state, config=invoke_config)
     
     # Return the entire result
     return result 
