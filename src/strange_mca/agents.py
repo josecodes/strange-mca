@@ -1,6 +1,9 @@
 """Agent definitions for the multiagent system."""
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+import os
+import networkx as nx
+import graphviz  # Use graphviz directly
 
 from langchain.prompts import PromptTemplate
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -15,8 +18,6 @@ class AgentConfig(BaseModel):
     level: int
     node_number: int
     system_prompt: str
-    parent: Optional[str] = None
-    children: List[str] = Field(default_factory=list)
     
     @property
     def full_name(self) -> str:
@@ -74,6 +75,224 @@ class Agent:
         return f"Agent({self.config.full_name})"
 
 
+class AgentTree:
+    """A tree of agents using NetworkX for structure management."""
+    
+    def __init__(self, child_per_parent: int, depth: int):
+        """Initialize the agent tree.
+        
+        Args:
+            child_per_parent: The number of children each non-leaf node has.
+            depth: The number of levels in the tree.
+        """
+        self.child_per_parent = child_per_parent
+        self.depth = depth
+        self.graph = nx.DiGraph()
+        
+        # Build the tree structure
+        self._build_tree()
+    
+    def _build_tree(self):
+        """Build the tree structure with agent configurations."""
+        # Create the root node
+        root_name = "L1N1"
+        root_config = AgentConfig(
+            name=root_name,
+            level=1,
+            node_number=1,
+            system_prompt=(
+                "You are the supervisor agent responsible for coordinating a team of agents. "
+                "Your role is to break down complex tasks into simpler subtasks and assign them "
+                "to your team members. You will receive their responses and synthesize a final answer."
+            )
+        )
+        # Add the root node to the graph with its config as a node attribute
+        self.graph.add_node(root_name, config=root_config)
+        
+        # Create the rest of the tree
+        for level in range(2, self.depth + 1):
+            parent_level = level - 1
+            parent_count = self.child_per_parent ** (parent_level - 1)
+            
+            for parent_idx in range(1, parent_count + 1):
+                parent_name = f"L{parent_level}N{parent_idx}"
+                
+                for child_idx in range(1, self.child_per_parent + 1):
+                    node_number = ((parent_idx - 1) * self.child_per_parent) + child_idx
+                    child_name = f"L{level}N{node_number}"
+                    
+                    child_config = AgentConfig(
+                        name=child_name,
+                        level=level,
+                        node_number=node_number,
+                        system_prompt=(
+                            f"You are agent {child_name}, a specialized agent working as part of a team. "
+                            f"Your parent agent is {parent_name}. "
+                            "You will receive tasks from your parent and should complete them to the best of your ability."
+                        )
+                    )
+                    
+                    # Add the child node to the graph with its config as a node attribute
+                    self.graph.add_node(child_name, config=child_config)
+                    
+                    # Add the edge from parent to child
+                    self.graph.add_edge(parent_name, child_name)
+        
+        # Validate the graph
+        if not nx.is_directed_acyclic_graph(self.graph):
+            raise ValueError("The tree structure contains cycles, which is not allowed")
+    
+    def get_config(self, node_name: str) -> AgentConfig:
+        """Get the configuration for a node."""
+        return self.graph.nodes[node_name]['config']
+    
+    def get_configs(self) -> Dict[str, AgentConfig]:
+        """Get all configurations as a dictionary."""
+        return {node: data['config'] for node, data in self.graph.nodes(data=True)}
+    
+    def is_leaf(self, node_name: str) -> bool:
+        """Return whether a node is a leaf node."""
+        return len(list(self.graph.successors(node_name))) == 0
+    
+    def is_root(self, node_name: str) -> bool:
+        """Return whether a node is the root node."""
+        return len(list(self.graph.predecessors(node_name))) == 0
+    
+    def get_root(self) -> str:
+        """Get the name of the root node."""
+        for node in self.graph.nodes():
+            if self.is_root(node):
+                return node
+        return None
+    
+    def get_leaf_nodes(self) -> List[str]:
+        """Get the names of all leaf nodes."""
+        return [node for node in self.graph.nodes() if self.is_leaf(node)]
+    
+    def get_children(self, node_name: str) -> List[str]:
+        """Get the children of a node."""
+        return list(self.graph.successors(node_name))
+    
+    def get_parent(self, node_name: str) -> Optional[str]:
+        """Get the parent of a node."""
+        parents = list(self.graph.predecessors(node_name))
+        return parents[0] if parents else None
+    
+    def perform_down_traversal(self, start_node: Optional[str] = None) -> List[str]:
+        """Perform a downward traversal of the tree.
+        
+        Args:
+            start_node: The node to start from. If None, starts from the root.
+            
+        Returns:
+            List of nodes in traversal order.
+        """
+        if start_node is None:
+            start_node = self.get_root()
+        
+        # Use NetworkX's BFS to traverse the tree downward
+        traversal = list(nx.bfs_tree(self.graph, source=start_node))
+        return traversal
+    
+    def perform_up_traversal(self, leaf_nodes: Optional[List[str]] = None) -> List[str]:
+        """Perform an upward traversal of the tree using breadth-first search.
+        
+        Args:
+            leaf_nodes: The leaf nodes to start from. If None, uses all leaf nodes.
+            
+        Returns:
+            List of nodes in traversal order.
+        """
+        if leaf_nodes is None:
+            leaf_nodes = self.get_leaf_nodes()
+        
+        # Create a reversed graph for upward traversal
+        reversed_graph = self.graph.reverse()
+        
+        # Track processed nodes and their order
+        processed = []
+        visited = set()
+        
+        # Initialize queue with all leaf nodes
+        from collections import deque
+        queue = deque(leaf_nodes)
+        
+        # Add all leaf nodes to visited set
+        for leaf in leaf_nodes:
+            visited.add(leaf)
+        
+        # Perform breadth-first traversal
+        while queue:
+            current = queue.popleft()
+            processed.append(current)
+            
+            # Get the parent in the original graph (successor in reversed graph)
+            for parent in reversed_graph.successors(current):
+                if parent not in visited:
+                    visited.add(parent)
+                    queue.append(parent)
+        
+        return processed
+    
+    def visualize(self, output_dir: str = None, filename: str = "agent_tree"):
+        """Visualize the tree structure using graphviz.
+        
+        Args:
+            output_dir: Directory to save the visualization. If None, just displays it.
+            filename: Name of the file to save (without extension).
+            
+        Returns:
+            Path to the saved visualization file if output_dir is provided, None otherwise.
+        """
+        # Create a graphviz Digraph
+        dot = graphviz.Digraph(comment='Agent Tree')
+        
+        # Add nodes
+        for node_name, config in self.get_configs().items():
+            # Determine node shape and color based on type
+            if self.is_root(node_name):
+                node_shape = 'doubleoctagon'
+                node_color = 'lightblue'
+                node_label = f"{node_name}\n(Root)"
+            elif self.is_leaf(node_name):
+                node_shape = 'box'
+                node_color = 'lightgreen'
+                node_label = f"{node_name}\n(Leaf)"
+            else:
+                node_shape = 'ellipse'
+                node_color = 'lightyellow'
+                node_label = f"{node_name}\n(Internal)"
+            
+            # Add the node with appropriate attributes
+            dot.node(node_name, label=node_label, shape=node_shape, style='filled', fillcolor=node_color)
+        
+        # Add edges
+        for edge in self.graph.edges():
+            source, target = edge
+            dot.edge(source, target)
+        
+        # Set graph attributes for better layout
+        dot.graph_attr['rankdir'] = 'TB'  # Top to bottom layout
+        dot.graph_attr['nodesep'] = '0.5'
+        dot.graph_attr['ranksep'] = '0.7'
+        dot.graph_attr['splines'] = 'ortho'  # Orthogonal edges
+        
+        # Add a title
+        dot.attr(label=f'Agent Tree (Depth: {self.depth}, Children per Parent: {self.child_per_parent})')
+        dot.attr(fontsize='20')
+        
+        # Render the graph
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, filename)
+            dot.render(output_path, format='png', cleanup=True)
+            return f"{output_path}.png"
+        else:
+            # Just display the graph
+            dot.view(cleanup=True)
+            return None
+
+
 def create_agent_configs(child_per_parent: int, depth: int) -> Dict[str, AgentConfig]:
     """Create agent configurations for a tree with the given parameters.
     
@@ -84,47 +303,19 @@ def create_agent_configs(child_per_parent: int, depth: int) -> Dict[str, AgentCo
     Returns:
         A dictionary mapping agent names to their configurations.
     """
-    configs = {}
+    # Create an agent tree and return its configs
+    tree = AgentTree(child_per_parent, depth)
+    return tree.get_configs()
+
+
+def create_agent_tree(child_per_parent: int, depth: int) -> AgentTree:
+    """Create an agent tree with the given parameters.
     
-    # Create the root node
-    root_name = "L1N1"
-    root_config = AgentConfig(
-        name=root_name,
-        level=1,
-        node_number=1,
-        system_prompt=(
-            "You are the supervisor agent responsible for coordinating a team of agents. "
-            "Your role is to break down complex tasks into simpler subtasks and assign them "
-            "to your team members. You will receive their responses and synthesize a final answer."
-        )
-    )
-    configs[root_name] = root_config
-    
-    # Create the rest of the tree
-    for level in range(2, depth + 1):
-        parent_level = level - 1
-        parent_count = child_per_parent ** (parent_level - 1)
+    Args:
+        child_per_parent: The number of children each non-leaf node has.
+        depth: The number of levels in the tree.
         
-        for parent_idx in range(1, parent_count + 1):
-            parent_name = f"L{parent_level}N{parent_idx}"
-            
-            for child_idx in range(1, child_per_parent + 1):
-                node_number = ((parent_idx - 1) * child_per_parent) + child_idx
-                child_name = f"L{level}N{node_number}"
-                
-                child_config = AgentConfig(
-                    name=child_name,
-                    level=level,
-                    node_number=node_number,
-                    parent=parent_name,
-                    system_prompt=(
-                        f"You are agent {child_name}, a specialized agent working as part of a team. "
-                        f"Your parent agent is {parent_name}. "
-                        "You will receive tasks from your parent and should complete them to the best of your ability."
-                    )
-                )
-                
-                configs[child_name] = child_config
-                configs[parent_name].children.append(child_name)
-    
-    return configs 
+    Returns:
+        An AgentTree object.
+    """
+    return AgentTree(child_per_parent, depth) 
