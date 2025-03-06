@@ -178,11 +178,17 @@ class AgentTree:
         parents = list(self.graph.predecessors(node_name))
         return parents[0] if parents else None
     
-    def perform_down_traversal(self, start_node: Optional[str] = None) -> List[str]:
+    def perform_down_traversal(
+        self, 
+        start_node: Optional[str] = None,
+        node_callback: Optional[callable] = None
+    ) -> List[str]:
         """Perform a downward traversal of the tree.
         
         Args:
             start_node: The node to start from. If None, starts from the root.
+            node_callback: Optional callback function to execute at each node.
+                           The callback should accept two arguments: the node name and the AgentTree instance.
             
         Returns:
             List of nodes in traversal order.
@@ -192,13 +198,25 @@ class AgentTree:
         
         # Use NetworkX's BFS to traverse the tree downward
         traversal = list(nx.bfs_tree(self.graph, source=start_node))
+        
+        # Execute callback for each node if provided
+        if node_callback:
+            for node in traversal:
+                node_callback(node, self)
+                
         return traversal
     
-    def perform_up_traversal(self, leaf_nodes: Optional[List[str]] = None) -> List[str]:
+    def perform_up_traversal(
+        self, 
+        leaf_nodes: Optional[List[str]] = None,
+        node_callback: Optional[callable] = None
+    ) -> List[str]:
         """Perform an upward traversal of the tree using breadth-first search.
         
         Args:
             leaf_nodes: The leaf nodes to start from. If None, uses all leaf nodes.
+            node_callback: Optional callback function to execute at each node.
+                           The callback should accept two arguments: the node name and the AgentTree instance.
             
         Returns:
             List of nodes in traversal order.
@@ -225,6 +243,10 @@ class AgentTree:
         while queue:
             current = queue.popleft()
             processed.append(current)
+            
+            # Execute callback for the current node if provided
+            if node_callback:
+                node_callback(current, self)
             
             # Get the parent in the original graph (successor in reversed graph)
             for parent in reversed_graph.successors(current):
