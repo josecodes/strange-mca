@@ -131,9 +131,6 @@ def create_bidirectional_graph(
     Returns:
         The compiled graph.
     """
-    # Ensure StateGraph is imported
-    from langgraph.graph import StateGraph, END
-    
     logger.info(f"Creating bidirectional graph with {child_per_parent} children per parent and {depth} levels")
     
     # Create agent tree using NetworkX
@@ -141,10 +138,10 @@ def create_bidirectional_graph(
     
     # Create a dictionary to store agents for each node
     agents = {}
-    for at_node_name in agent_tree.graph.nodes():
-        config = agent_tree.get_config(at_node_name)
-        agents[at_node_name] = Agent(config, model_name=model_name)
-        logger.debug(f"Created agent for {at_node_name}")
+    for agent_name in agent_tree.graph.nodes():
+        config = agent_tree.get_config(agent_name)
+        agents[agent_name] = Agent(config, model_name=model_name)
+        logger.debug(f"Created agent for {agent_name}")
     
     # Initialize the graph builder
     graph_builder = StateGraph(State)
@@ -153,8 +150,8 @@ def create_bidirectional_graph(
     def down_function(state: State, lg_node_name: str) -> dict:
         """Process a node in the downward pass (task decomposition)."""
         # Extract the AgentTree node name from the LangGraph node name
-        at_node_name = lg_node_name.split("_down")[0]
-        agent = agents[at_node_name]
+        agent_name = lg_node_name.split("_down")[0]
+        agent = agents[agent_name]
         
         # Update the current node in the state to use the LangGraph node name
         state_updates = {"current_node": lg_node_name}
@@ -170,9 +167,9 @@ def create_bidirectional_graph(
         # Check if this node has a task, otherwise use parent's task or original task
         if "task" not in nodes.get(lg_node_name, {}):
             # If this is not the root, get the parent's task
-            if not agent_tree.is_root(at_node_name):
-                at_parent = agent_tree.get_parent(at_node_name)
-                lg_parent_down = f"{at_parent}_down"
+            if not agent_tree.is_root(agent_name):
+                agent_parent = agent_tree.get_parent(agent_name)
+                lg_parent_down = f"{agent_parent}_down"
                 if lg_parent_down in nodes and "task" in nodes[lg_parent_down]:
                     # Use the parent's task as a fallback
                     nodes[lg_node_name]["task"] = nodes[lg_parent_down]["task"]
@@ -188,7 +185,7 @@ def create_bidirectional_graph(
         context = nodes[lg_node_name].get("context", state["original_context"])
         
         # Check if this is a leaf node
-        if agent_tree.is_leaf(at_node_name):
+        if agent_tree.is_leaf(agent_name):
             logger.debug(f"[{lg_node_name}] Processing leaf node task (downward pass)")
             # Leaf nodes directly process their task
             response = agent.run(context=context, task=task)
@@ -198,16 +195,16 @@ def create_bidirectional_graph(
             state_updates["nodes"] = nodes
             
             # Return the updated state with next node being the upward pass of this node
-            return {**state_updates, "next": f"{at_node_name}_up"}
+            return {**state_updates, "next": f"{agent_name}_up"}
         else:
             logger.debug(f"[{lg_node_name}] Decomposing task for children (downward pass)")
             # Non-leaf nodes decompose the task for their children
-            at_children = agent_tree.get_children(at_node_name)
+            agent_children = agent_tree.get_children(agent_name)
             
             # Create a prompt for task decomposition
-            child_nodes_str = ", ".join(at_children)
-            system_prompt = f"You are coordinating a task across {len(at_children)} agents: {child_nodes_str}."
-            decomposition_prompt = create_task_decomposition_prompt(task, system_prompt, at_children)
+            child_nodes_str = ", ".join(agent_children)
+            system_prompt = f"You are coordinating a task across {len(agent_children)} agents: {child_nodes_str}."
+            decomposition_prompt = create_task_decomposition_prompt(task, system_prompt, agent_children)
             
             # Run the agent to decompose the task
             response = agent.run(context=context, task=decomposition_prompt)
@@ -216,13 +213,13 @@ def create_bidirectional_graph(
             nodes[lg_node_name]["response"] = response
             
             # Parse the response to extract tasks for children
-            for at_child in at_children:
-                lg_child_down = f"{at_child}_down"
+            for agent_child in agent_children:
+                lg_child_down = f"{agent_child}_down"
                 if lg_child_down not in nodes:
                     nodes[lg_child_down] = {}
                 
                 # Look for the child's task in the response
-                child_task_prefix = f"{at_child}: "
+                child_task_prefix = f"{agent_child}: "
                 for line in response.split("\n"):
                     if line.startswith(child_task_prefix):
                         child_task = line[len(child_task_prefix):].strip()
@@ -232,14 +229,14 @@ def create_bidirectional_graph(
             state_updates["nodes"] = nodes
             
             # Return the updated state with next node being the first child's downward pass
-            return {**state_updates, "next": f"{at_children[0]}_down"}
+            return {**state_updates, "next": f"{agent_children[0]}_down"}
     
     # Define the upward function (response synthesis)
     def up_function(state: State, lg_node_name: str) -> dict:
         """Process a node in the upward pass (response synthesis)."""
         # Extract the AgentTree node name from the LangGraph node name
-        at_node_name = lg_node_name.split("_up")[0]
-        agent = agents[at_node_name]
+        agent_name = lg_node_name.split("_up")[0]
+        agent = agents[agent_name]
         
         # Update the current node in the state to use the LangGraph node name
         state_updates = {"current_node": lg_node_name}
@@ -250,21 +247,21 @@ def create_bidirectional_graph(
             nodes[lg_node_name] = {}
         
         # Check if this is the root node
-        if agent_tree.is_root(at_node_name):
+        if agent_tree.is_root(agent_name):
             logger.debug(f"[{lg_node_name}] Processing root node synthesis (upward pass)")
             
             # Get all child responses from their upward nodes
-            at_children = agent_tree.get_children(at_node_name)
+            agent_children = agent_tree.get_children(agent_name)
             child_responses = {}
             
-            for at_child in at_children:
+            for agent_child in agent_children:
                 # Use only the child's upward node response
-                lg_child_up = f"{at_child}_up"
+                lg_child_up = f"{agent_child}_up"
                 if lg_child_up in nodes and "response" in nodes[lg_child_up]:
-                    child_responses[at_child] = nodes[lg_child_up]["response"]
+                    child_responses[agent_child] = nodes[lg_child_up]["response"]
                 else:
                     # If no response is available, use an empty string
-                    child_responses[at_child] = ""
+                    child_responses[agent_child] = ""
                     logger.warning(f"No response found for {lg_child_up}")
             
             # Create synthesis prompt
@@ -280,12 +277,12 @@ def create_bidirectional_graph(
             
             # Root node completes the graph
             return {**state_updates, "next": END}
-        elif agent_tree.is_leaf(at_node_name):
+        elif agent_tree.is_leaf(agent_name):
             logger.debug(f"[{lg_node_name}] Processing leaf node (upward pass)")
             
             # Leaf nodes have already processed their task in the downward pass
             # Copy the response from the downward pass
-            lg_down_node = f"{at_node_name}_down"
+            lg_down_node = f"{agent_name}_down"
             if lg_down_node in nodes and "response" in nodes[lg_down_node]:
                 nodes[lg_node_name]["response"] = nodes[lg_down_node]["response"]
                 state_updates["nodes"] = nodes
@@ -293,40 +290,40 @@ def create_bidirectional_graph(
                 logger.warning(f"No response found for {lg_down_node}")
             
             # Get the parent node
-            at_parent = agent_tree.get_parent(at_node_name)
+            agent_parent = agent_tree.get_parent(agent_name)
             
             # Get all siblings (including self)
-            at_siblings = agent_tree.get_children(at_parent)
+            agent_siblings = agent_tree.get_children(agent_parent)
             
             # Find the next sibling
             try:
-                idx = at_siblings.index(at_node_name)
+                idx = agent_siblings.index(agent_name)
                 
-                if idx < len(at_siblings) - 1:
+                if idx < len(agent_siblings) - 1:
                     # If not the last sibling, go to next sibling's downward pass
-                    at_next_sibling = at_siblings[idx + 1]
-                    return {**state_updates, "next": f"{at_next_sibling}_down"}
+                    agent_next_sibling = agent_siblings[idx + 1]
+                    return {**state_updates, "next": f"{agent_next_sibling}_down"}
                 else:
                     # If last sibling, go to parent's upward pass
-                    return {**state_updates, "next": f"{at_parent}_up"}
+                    return {**state_updates, "next": f"{agent_parent}_up"}
             except ValueError:
                 # Fallback if node not found in siblings
-                return {**state_updates, "next": f"{at_parent}_up"}
+                return {**state_updates, "next": f"{agent_parent}_up"}
         else:
             logger.debug(f"[{lg_node_name}] Processing non-leaf node synthesis (upward pass)")
             
             # Non-leaf, non-root nodes synthesize responses from their children's upward nodes
-            at_children = agent_tree.get_children(at_node_name)
+            agent_children = agent_tree.get_children(agent_name)
             child_responses = {}
             
-            for at_child in at_children:
+            for agent_child in agent_children:
                 # Use only the child's upward node response
-                lg_child_up = f"{at_child}_up"
+                lg_child_up = f"{agent_child}_up"
                 if lg_child_up in nodes and "response" in nodes[lg_child_up]:
-                    child_responses[at_child] = nodes[lg_child_up]["response"]
+                    child_responses[agent_child] = nodes[lg_child_up]["response"]
                 else:
                     # If no response is available, use an empty string
-                    child_responses[at_child] = ""
+                    child_responses[agent_child] = ""
                     logger.warning(f"No response found for {lg_child_up}")
             
             # Create synthesis prompt
@@ -340,36 +337,36 @@ def create_bidirectional_graph(
             state_updates["nodes"] = nodes
             
             # Get the parent node
-            at_parent = agent_tree.get_parent(at_node_name)
+            agent_parent = agent_tree.get_parent(agent_name)
             
             # Get all siblings (including self)
-            at_siblings = agent_tree.get_children(at_parent)
+            agent_siblings = agent_tree.get_children(agent_parent)
             
             # Find the next sibling
             try:
-                idx = at_siblings.index(at_node_name)
+                idx = agent_siblings.index(agent_name)
                 
-                if idx < len(at_siblings) - 1:
+                if idx < len(agent_siblings) - 1:
                     # If not the last sibling, go to next sibling's downward pass
-                    at_next_sibling = at_siblings[idx + 1]
-                    return {**state_updates, "next": f"{at_next_sibling}_down"}
+                    agent_next_sibling = agent_siblings[idx + 1]
+                    return {**state_updates, "next": f"{agent_next_sibling}_down"}
                 else:
                     # If last sibling, go to parent's upward pass
-                    return {**state_updates, "next": f"{at_parent}_up"}
+                    return {**state_updates, "next": f"{agent_parent}_up"}
             except ValueError:
                 # Fallback if node not found in siblings
-                return {**state_updates, "next": f"{at_parent}_up"}
+                return {**state_updates, "next": f"{agent_parent}_up"}
     
     # Use callbacks to build the LangGraph nodes and edges
-    def add_langgraph_node_callback(at_node: str, tree: AgentTree) -> None:
+    def add_langgraph_node_callback(agent_name: str, tree: AgentTree) -> None:
         """Callback to add nodes to the LangGraph during traversal."""
         # Add downward node
-        lg_down_node = f"{at_node}_down"
+        lg_down_node = f"{agent_name}_down"
         graph_builder.add_node(lg_down_node, lambda s: down_function(s, lg_down_node))
         logger.debug(f"Added downward node {lg_down_node} to LangGraph")
         
         # Add upward node
-        lg_up_node = f"{at_node}_up"
+        lg_up_node = f"{agent_name}_up"
         graph_builder.add_node(lg_up_node, lambda s: up_function(s, lg_up_node))
         logger.debug(f"Added upward node {lg_up_node} to LangGraph")
     
@@ -377,64 +374,64 @@ def create_bidirectional_graph(
     agent_tree.perform_down_traversal(node_callback=add_langgraph_node_callback)
     
     # Add edges for downward traversal
-    def add_downward_edges_callback(at_node: str, tree: AgentTree) -> None:
+    def add_downward_edges_callback(agent_name: str, tree: AgentTree) -> None:
         """Callback to add downward edges to the LangGraph during traversal."""
-        if tree.is_leaf(at_node):
+        if tree.is_leaf(agent_name):
             # Leaf nodes don't have children, so no downward edges needed
             return
         
-        at_children = tree.get_children(at_node)
-        if at_children:
+        agent_children = tree.get_children(agent_name)
+        if agent_children:
             # Connect this node's downward to its first child's downward
-            at_first_child = at_children[0]
-            lg_node_down = f"{at_node}_down"
-            lg_first_child_down = f"{at_first_child}_down"
+            agent_first_child = agent_children[0]
+            lg_node_down = f"{agent_name}_down"
+            lg_first_child_down = f"{agent_first_child}_down"
             graph_builder.add_edge(lg_node_down, lg_first_child_down)
             logger.debug(f"Added downward edge: {lg_node_down} -> {lg_first_child_down}")
     
     # Add edges for upward traversal and sibling transitions
-    def add_upward_edges_callback(at_node: str, tree: AgentTree) -> None:
+    def add_upward_edges_callback(agent_name: str, tree: AgentTree) -> None:
         """Callback to add upward edges and sibling transitions to the LangGraph."""
-        if tree.is_root(at_node):
+        if tree.is_root(agent_name):
             # Root node's upward pass ends the graph
-            lg_node_up = f"{at_node}_up"
+            lg_node_up = f"{agent_name}_up"
             graph_builder.add_edge(lg_node_up, END)
             logger.debug(f"Added edge: {lg_node_up} -> END")
             return
         
-        at_parent = tree.get_parent(at_node)
-        at_siblings = tree.get_children(at_parent)
+        agent_parent = tree.get_parent(agent_name)
+        agent_siblings = tree.get_children(agent_parent)
         
         # Find this node's position among siblings
         try:
-            idx = at_siblings.index(at_node)
+            idx = agent_siblings.index(agent_name)
             
-            if idx < len(at_siblings) - 1:
+            if idx < len(agent_siblings) - 1:
                 # If not the last sibling, connect to next sibling's downward
-                at_next_sibling = at_siblings[idx + 1]
-                lg_node_up = f"{at_node}_up"
-                lg_next_sibling_down = f"{at_next_sibling}_down"
+                agent_next_sibling = agent_siblings[idx + 1]
+                lg_node_up = f"{agent_name}_up"
+                lg_next_sibling_down = f"{agent_next_sibling}_down"
                 graph_builder.add_edge(lg_node_up, lg_next_sibling_down)
                 logger.debug(f"Added sibling transition: {lg_node_up} -> {lg_next_sibling_down}")
             else:
                 # If last sibling, connect to parent's upward
-                lg_node_up = f"{at_node}_up"
-                lg_parent_up = f"{at_parent}_up"
+                lg_node_up = f"{agent_name}_up"
+                lg_parent_up = f"{agent_parent}_up"
                 graph_builder.add_edge(lg_node_up, lg_parent_up)
                 logger.debug(f"Added upward edge: {lg_node_up} -> {lg_parent_up}")
         except ValueError:
             # Fallback if node not found in siblings
-            lg_node_up = f"{at_node}_up"
-            lg_parent_up = f"{at_parent}_up"
+            lg_node_up = f"{agent_name}_up"
+            lg_parent_up = f"{agent_parent}_up"
             graph_builder.add_edge(lg_node_up, lg_parent_up)
             logger.debug(f"Added fallback upward edge: {lg_node_up} -> {lg_parent_up}")
     
     # Add leaf node transitions from downward to upward
-    def add_leaf_transitions_callback(at_node: str, tree: AgentTree) -> None:
+    def add_leaf_transitions_callback(agent_name: str, tree: AgentTree) -> None:
         """Callback to add transitions from downward to upward for leaf nodes."""
-        if tree.is_leaf(at_node):
-            lg_node_down = f"{at_node}_down"
-            lg_node_up = f"{at_node}_up"
+        if tree.is_leaf(agent_name):
+            lg_node_down = f"{agent_name}_down"
+            lg_node_up = f"{agent_name}_up"
             graph_builder.add_edge(lg_node_down, lg_node_up)
             logger.debug(f"Added leaf transition: {lg_node_down} -> {lg_node_up}")
     
@@ -546,26 +543,26 @@ def run_bidirectional_graph(
             for lg_node_name, node_data in result["nodes"].items():
                 # Extract the AgentTree node name from the LangGraph node name
                 if "_down" in lg_node_name:
-                    at_node_name = lg_node_name.split("_down")[0]
+                    agent_name = lg_node_name.split("_down")[0]
                 elif "_up" in lg_node_name:
-                    at_node_name = lg_node_name.split("_up")[0]
+                    agent_name = lg_node_name.split("_up")[0]
                 else:
-                    at_node_name = lg_node_name
+                    agent_name = lg_node_name
                 
                 # Extract response, task, and context
                 if "response" in node_data:
                     # For responses, prefer the upward node's response if available
-                    lg_up_node = f"{at_node_name}_up"
+                    lg_up_node = f"{agent_name}_up"
                     if lg_up_node in result["nodes"] and "response" in result["nodes"][lg_up_node]:
-                        node_responses[at_node_name] = result["nodes"][lg_up_node]["response"]
+                        node_responses[agent_name] = result["nodes"][lg_up_node]["response"]
                     else:
-                        node_responses[at_node_name] = node_data["response"]
+                        node_responses[agent_name] = node_data["response"]
                 
-                if "task" in node_data and at_node_name not in node_tasks:
-                    node_tasks[at_node_name] = node_data["task"]
+                if "task" in node_data and agent_name not in node_tasks:
+                    node_tasks[agent_name] = node_data["task"]
                 
-                if "context" in node_data and at_node_name not in node_contexts:
-                    node_contexts[at_node_name] = node_data["context"]
+                if "context" in node_data and agent_name not in node_contexts:
+                    node_contexts[agent_name] = node_data["context"]
             
             # Don't include these in the final result to avoid confusion
             # result["node_responses"] = node_responses
