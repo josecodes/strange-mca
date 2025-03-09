@@ -29,11 +29,9 @@ class State(TypedDict):
     # The original task being processed
     original_task: str
     
-    # The original context
-    original_context: str
-    
+
     # Dictionary mapping node names to their data
-    # Each node entry contains 'task', 'context', and 'response'
+    # Each node entry contains 'task', and 'response'
     nodes: Dict[str, Dict[str, str]]
     
     # The current node being executed (using LangGraph node name, e.g., "L2N2_down")
@@ -43,13 +41,12 @@ class State(TypedDict):
     final_response: str
 
 
-#todo: move this to prompts.py
-def create_task_decomposition_prompt(task: str, system_prompt: str, child_nodes: List[str]) -> str:
+def create_task_decomposition_prompt(task: str, context: str, child_nodes: List[str]) -> str:
     """Create a prompt for task decomposition.
     
     Args:
         task: The original task to decompose.
-        system_prompt: The system prompt of the agent that will decompose the task.
+        context: The context for the agent that will decompose the task.
         child_nodes: List of child node names that will receive the subtasks.
         
     Returns:
@@ -57,9 +54,9 @@ def create_task_decomposition_prompt(task: str, system_prompt: str, child_nodes:
     """
     child_nodes_str = "\n".join([f"- {node}" for node in child_nodes])
     
-    return f"""Based on your system prompt:
+    return f"""
 
-{system_prompt}
+{context}
 
 Your task is to break down the following task into subtasks for your team members:
 
@@ -103,7 +100,7 @@ def create_synthesis_prompt(child_responses: Dict[str, str]) -> str:
 Your task is to:
 1. Integrate the key insights from each response
 2. Resolve any contradictions or inconsistencies
-3. Provide a comprehensive and coherent final answer
+3. Provide a coherent and concise final answer
 
 Format your response as a well-structured summary."""
 
@@ -147,67 +144,32 @@ def create_bidirectional_graph(
     graph_builder = StateGraph(State)
     
     # Define the downward function (task decomposition)
-    def down_function(state: State, lg_node_name: str) -> dict:
+    def down_function(state: State, lg_node_name: str) -> State:
         """Process a node in the downward pass (task decomposition)."""
         # Extract the AgentTree node name from the LangGraph node name
         agent_name = lg_node_name.split("_down")[0]
         agent = agents[agent_name]
         
-        # Update the current node in the state to use the LangGraph node name
-        state_updates = {"current_node": lg_node_name}
+        #to work with how langraph updates state
+        nodes = state["nodes"].copy()
+        state_updates: State = {"nodes": nodes, "current_node": lg_node_name}
+
+        task = nodes[lg_node_name]["task"]
         
-        # Initialize nodes dictionary if it doesn't exist
-        nodes = state.get("nodes", {}).copy()
-        if lg_node_name not in nodes:
-            nodes[lg_node_name] = {}
-        
-        # Get the task and context for this node
-        original_task = state["original_task"]
-        
-        # Check if this node has a task, otherwise use parent's task or original task
-        if "task" not in nodes.get(lg_node_name, {}):
-            # If this is not the root, get the parent's task
-            if not agent_tree.is_root(agent_name):
-                agent_parent = agent_tree.get_parent(agent_name)
-                lg_parent_down = f"{agent_parent}_down"
-                if lg_parent_down in nodes and "task" in nodes[lg_parent_down]:
-                    # Use the parent's task as a fallback
-                    nodes[lg_node_name]["task"] = nodes[lg_parent_down]["task"]
-                else:
-                    # Use the original task as a fallback
-                    nodes[lg_node_name]["task"] = original_task
-            else:
-                # Root node uses the original task
-                nodes[lg_node_name]["task"] = original_task
-        
-        # Get the task and context for this node
-        task = nodes[lg_node_name].get("task", original_task)
-        context = nodes[lg_node_name].get("context", state["original_context"])
-        
-        # Check if this is a leaf node
         if agent_tree.is_leaf(agent_name):
             logger.debug(f"[{lg_node_name}] Processing leaf node task (downward pass)")
-            # Leaf nodes directly process their task
-            response = agent.run(context=context, task=task)
-            
-            # Update node response
+            response = agent.run(task=task)
             nodes[lg_node_name]["response"] = response
-            state_updates["nodes"] = nodes
-            
-            # Return the updated state with next node being the upward pass of this node
-            return {**state_updates, "next": f"{agent_name}_up"}
+            return state_updates
         else:
             logger.debug(f"[{lg_node_name}] Decomposing task for children (downward pass)")
-            # Non-leaf nodes decompose the task for their children
             agent_children = agent_tree.get_children(agent_name)
             
-            # Create a prompt for task decomposition
             child_nodes_str = ", ".join(agent_children)
-            system_prompt = f"You are coordinating a task across {len(agent_children)} agents: {child_nodes_str}."
-            decomposition_prompt = create_task_decomposition_prompt(task, system_prompt, agent_children)
-            
-            # Run the agent to decompose the task
-            response = agent.run(context=context, task=decomposition_prompt)
+            context = f"You are coordinating a task across {len(agent_children)} agents: {child_nodes_str}."
+            decomposition_prompt = create_task_decomposition_prompt(task, context, agent_children)
+            nodes[lg_node_name]["decomposition_prompt"] = decomposition_prompt
+            response = agent.run(task=decomposition_prompt)
             
             # Update node response
             nodes[lg_node_name]["response"] = response
@@ -217,19 +179,18 @@ def create_bidirectional_graph(
                 lg_child_down = f"{agent_child}_down"
                 if lg_child_down not in nodes:
                     nodes[lg_child_down] = {}
-                
-                # Look for the child's task in the response
                 child_task_prefix = f"{agent_child}: "
+                task_found = False
                 for line in response.split("\n"):
                     if line.startswith(child_task_prefix):
                         child_task = line[len(child_task_prefix):].strip()
                         nodes[lg_child_down]["task"] = child_task
+                        task_found = True
                         break
-            
-            state_updates["nodes"] = nodes
-            
-            # Return the updated state with next node being the first child's downward pass
-            return {**state_updates, "next": f"{agent_children[0]}_down"}
+                if not task_found:
+                    logger.warning(f"No task found for child agent {agent_child} in response")
+
+            return state_updates
     
     # Define the upward function (response synthesis)
     def up_function(state: State, lg_node_name: str) -> dict:
@@ -239,7 +200,7 @@ def create_bidirectional_graph(
         agent = agents[agent_name]
         
         # Update the current node in the state to use the LangGraph node name
-        state_updates = {"current_node": lg_node_name}
+        state_updates: State = {"current_node": lg_node_name}
         
         # Initialize nodes dictionary if it doesn't exist
         nodes = state.get("nodes", {}).copy()
@@ -268,7 +229,7 @@ def create_bidirectional_graph(
             synthesis_prompt = create_synthesis_prompt(child_responses)
             
             # Run the agent with the synthesis prompt
-            final_response = agent.run(context=state["original_context"], task=synthesis_prompt)
+            final_response = agent.run(task=synthesis_prompt)
             
             # Update the node response and final response
             nodes[lg_node_name]["response"] = final_response
@@ -276,7 +237,7 @@ def create_bidirectional_graph(
             state_updates["final_response"] = final_response
             
             # Root node completes the graph
-            return {**state_updates, "next": END}
+            return state_updates
         elif agent_tree.is_leaf(agent_name):
             logger.debug(f"[{lg_node_name}] Processing leaf node (upward pass)")
             
@@ -302,13 +263,13 @@ def create_bidirectional_graph(
                 if idx < len(agent_siblings) - 1:
                     # If not the last sibling, go to next sibling's downward pass
                     agent_next_sibling = agent_siblings[idx + 1]
-                    return {**state_updates, "next": f"{agent_next_sibling}_down"}
+                    return state_updates
                 else:
                     # If last sibling, go to parent's upward pass
-                    return {**state_updates, "next": f"{agent_parent}_up"}
+                    return state_updates
             except ValueError:
                 # Fallback if node not found in siblings
-                return {**state_updates, "next": f"{agent_parent}_up"}
+                return state_updates
         else:
             logger.debug(f"[{lg_node_name}] Processing non-leaf node synthesis (upward pass)")
             
@@ -330,7 +291,7 @@ def create_bidirectional_graph(
             synthesis_prompt = create_synthesis_prompt(child_responses)
             
             # Run the agent with the synthesis prompt
-            response = agent.run(context=state["original_context"], task=synthesis_prompt)
+            response = agent.run(task=synthesis_prompt)
             
             # Update the node response
             nodes[lg_node_name]["response"] = response
@@ -349,13 +310,13 @@ def create_bidirectional_graph(
                 if idx < len(agent_siblings) - 1:
                     # If not the last sibling, go to next sibling's downward pass
                     agent_next_sibling = agent_siblings[idx + 1]
-                    return {**state_updates, "next": f"{agent_next_sibling}_down"}
+                    return state_updates
                 else:
                     # If last sibling, go to parent's upward pass
-                    return {**state_updates, "next": f"{agent_parent}_up"}
+                    return state_updates
             except ValueError:
                 # Fallback if node not found in siblings
-                return {**state_updates, "next": f"{agent_parent}_up"}
+                return state_updates
     
     # Use callbacks to build the LangGraph nodes and edges
     def add_langgraph_node_callback(agent_name: str, tree: AgentTree) -> None:
@@ -471,7 +432,6 @@ def create_bidirectional_graph(
 def run_bidirectional_graph(
     graph,
     task: str,
-    context: str = "",
     log_level: str = "warn",
     only_local_logs: bool = False,
     langgraph_viz_dir: Optional[str] = None,
@@ -481,7 +441,6 @@ def run_bidirectional_graph(
     Args:
         graph: The compiled graph to run.
         task: The task to perform.
-        context: The context for the task.
         log_level: The level of logging detail using standard Python logging levels: "warn", "info", or "debug".
                   Default is "warn" which shows only warnings and errors.
         only_local_logs: If True, only show logs from the strange_mca logger and suppress logs from other loggers.
@@ -508,18 +467,14 @@ def run_bidirectional_graph(
     
     logger.info(f"Identified root node: {at_root_node}")
     
-    # Create the initial state
-    lg_root_down = f"{at_root_node}_down"
-    initial_state = {
+    # initialize state
+    initial_state: State = {
         "original_task": task,
-        "original_context": context,
         "nodes": {
-            lg_root_down: {
+            f"{at_root_node}_down": {
                 "task": task,
-                "context": context
             }
         },
-        "current_node": lg_root_down,
     }
     
     logger.info("Running bidirectional graph...")
@@ -528,46 +483,6 @@ def run_bidirectional_graph(
         # Run the graph with the initial state
         config = RunnableConfig(callbacks=[callback_handler])
         result = graph.invoke(initial_state, config=config)
-        
-        # For backward compatibility, extract responses from nodes dictionary
-        # but don't include these in the final result
-        if "nodes" in result:
-            # Create backward compatibility dictionaries for internal use
-            node_responses = {}
-            node_tasks = {}
-            node_contexts = {}
-            
-            for lg_node_name, node_data in result["nodes"].items():
-                # Extract the AgentTree node name from the LangGraph node name
-                if "_down" in lg_node_name:
-                    agent_name = lg_node_name.split("_down")[0]
-                elif "_up" in lg_node_name:
-                    agent_name = lg_node_name.split("_up")[0]
-                else:
-                    agent_name = lg_node_name
-                
-                # Extract response, task, and context
-                if "response" in node_data:
-                    # For responses, prefer the upward node's response if available
-                    lg_up_node = f"{agent_name}_up"
-                    if lg_up_node in result["nodes"] and "response" in result["nodes"][lg_up_node]:
-                        node_responses[agent_name] = result["nodes"][lg_up_node]["response"]
-                    else:
-                        node_responses[agent_name] = node_data["response"]
-                
-                if "task" in node_data and agent_name not in node_tasks:
-                    node_tasks[agent_name] = node_data["task"]
-                
-                if "context" in node_data and agent_name not in node_contexts:
-                    node_contexts[agent_name] = node_data["context"]
-            
-            # Don't include these in the final result to avoid confusion
-            # result["node_responses"] = node_responses
-            # result["node_tasks"] = node_tasks
-            # result["node_contexts"] = node_contexts
-        
-
-        
         return result
     except Exception as e:
         logger.error(f"Error during graph execution: {e}")

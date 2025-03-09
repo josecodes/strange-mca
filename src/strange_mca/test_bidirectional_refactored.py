@@ -85,7 +85,6 @@ def main():
     result = run_bidirectional_graph(
         graph=graph,
         task=args.task,
-        context=args.context,
         log_level=args.log_level,
         only_local_logs=args.only_local_logs,
         langgraph_viz_dir=args.viz_dir

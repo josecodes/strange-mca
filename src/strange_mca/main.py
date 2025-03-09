@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 from src.strange_mca.agents import Agent, create_agent_configs
 from src.strange_mca.graph import create_graph, run_graph
 from src.strange_mca.logging_utils import DetailedLoggingCallbackHandler, setup_detailed_logging
-from src.strange_mca.prompts import update_agent_prompts
 from src.strange_mca.visualization import print_agent_details, print_agent_tree, visualize_agent_graph
 
 load_dotenv()
@@ -217,8 +216,6 @@ def main():
     # Create agent configurations
     agent_configs = create_agent_configs(args.child_per_parent, args.depth)
     
-    # Update agent prompts
-    agent_configs = update_agent_prompts(agent_configs, args.child_per_parent, args.depth)
     
     # Print the agent tree if requested
     if args.print_tree:

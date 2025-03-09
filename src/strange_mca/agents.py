@@ -17,7 +17,7 @@ class AgentConfig(BaseModel):
     name: str
     level: int
     node_number: int
-    system_prompt: str
+    system_prompt: Optional[str] = ""
     
     @property
     def full_name(self) -> str:
@@ -42,24 +42,22 @@ class Agent:
         # Create the prompt template for this agent
         self.prompt_template = PromptTemplate.from_template(
             template=(
-                "Context: {context}\n\n"
                 "Task: {task}\n\n"
                 "Your response:"
             )
         )
     
-    def run(self, context: str, task: str) -> str:
+    def run(self, task: str) -> str:
         """Run the agent on a task.
         
         Args:
-            context: The context for the task.
             task: The task to perform.
             
         Returns:
             The agent's response.
         """
         # Format the prompt
-        prompt = self.prompt_template.format(context=context, task=task)
+        prompt = self.prompt_template.format(task=task)
         
         # Create messages
         messages = [
@@ -99,12 +97,7 @@ class AgentTree:
         root_config = AgentConfig(
             name=root_name,
             level=1,
-            node_number=1,
-            system_prompt=(
-                "You are the supervisor agent responsible for coordinating a team of agents. "
-                "Your role is to break down complex tasks into simpler subtasks and assign them "
-                "to your team members. You will receive their responses and synthesize a final answer."
-            )
+            node_number=1
         )
         # Add the root node to the graph with its config as a node attribute
         self.graph.add_node(root_name, config=root_config)
@@ -124,12 +117,7 @@ class AgentTree:
                     child_config = AgentConfig(
                         name=child_name,
                         level=level,
-                        node_number=node_number,
-                        system_prompt=(
-                            f"You are agent {child_name}, a specialized agent working as part of a team. "
-                            f"Your parent agent is {parent_name}. "
-                            "You will receive tasks from your parent and should complete them to the best of your ability."
-                        )
+                        node_number=node_number
                     )
                     
                     # Add the child node to the graph with its config as a node attribute
