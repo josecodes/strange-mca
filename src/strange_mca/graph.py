@@ -520,9 +520,6 @@ def run_bidirectional_graph(
             }
         },
         "current_node": lg_root_down,
-        "node_responses": {},  # Keep for backward compatibility
-        "node_tasks": {},      # Keep for backward compatibility
-        "node_contexts": {}    # Keep for backward compatibility
     }
     
     logger.info("Running bidirectional graph...")
