@@ -74,14 +74,14 @@ def create_synthesis_prompt(child_responses: Dict[str, str]) -> str:
         for child, response in child_responses.items()
     ])
     
-    return f"""Synthesize the following responses from your team members into a coherent answer:
+    return f"""Synthesize the following responses from your team members:
 
 {formatted_responses}
 
 Your task is to:
 1. Integrate the key insights from each response
 2. Resolve any contradictions or inconsistencies
-3. Provide a coherent and concise final answer
+3. Provide a coherent and concise answer
 
 Format your response as a well-structured summary."""
 
@@ -202,6 +202,7 @@ def create_bidirectional_graph(
                     child_responses[agent_child] = ""
                     logger.warning(f"No response found for {lg_child_up}")
             synthesis_prompt = create_synthesis_prompt(child_responses)
+            nodes[lg_node_name]["synthesis_prompt"] = synthesis_prompt
             response = agent.run(task=synthesis_prompt)
             nodes[lg_node_name]["response"] = response
             if agent_tree.is_root(agent_name):
@@ -209,90 +210,25 @@ def create_bidirectional_graph(
                 state_updates["final_response"] = response
         return state_updates
     
-    # Use callbacks to build the LangGraph nodes and edges
-    def add_langgraph_node_callback(agent_name: str, tree: AgentTree) -> None:
+
+    def add_lg_node_edge(agent_name: str, predecessor_node: str, direction: Literal["down", "up"]) -> None:
         """Callback to add nodes to the LangGraph during traversal."""
-        # Add downward node
-        lg_down_node = f"{agent_name}_down"
-        graph_builder.add_node(lg_down_node, lambda s: down_function(s, lg_down_node))
-        logger.debug(f"Added downward node {lg_down_node} to LangGraph")
+        lg_node = f"{agent_name}_{direction}"
+        if direction == "down":
+            direction_function = down_function
+        else:
+            direction_function = up_function
+        graph_builder.add_node(lg_node, lambda s: direction_function(s, lg_node))
+        if predecessor_node is not None:
+            graph_builder.add_edge(predecessor_node+f"_{direction}", lg_node)
+            logger.debug(f"Added {direction} edge: {predecessor_node}_{direction} -> {lg_node}")
         
-        # Add upward node
-        lg_up_node = f"{agent_name}_up"
-        graph_builder.add_node(lg_up_node, lambda s: up_function(s, lg_up_node))
-        logger.debug(f"Added upward node {lg_up_node} to LangGraph")
-    
-    # Traverse the tree to add all nodes to the LangGraph
-    agent_tree.perform_down_traversal(node_callback=add_langgraph_node_callback)
-    
-    # Add edges for downward traversal
-    def add_downward_edges_callback(agent_name: str, tree: AgentTree) -> None:
-        """Callback to add downward edges to the LangGraph during traversal."""
-        if tree.is_leaf(agent_name):
-            # Leaf nodes don't have children, so no downward edges needed
-            return
         
-        agent_children = tree.get_children(agent_name)
-        if agent_children:
-            # Connect this node's downward to its first child's downward
-            agent_first_child = agent_children[0]
-            lg_node_down = f"{agent_name}_down"
-            lg_first_child_down = f"{agent_first_child}_down"
-            graph_builder.add_edge(lg_node_down, lg_first_child_down)
-            logger.debug(f"Added downward edge: {lg_node_down} -> {lg_first_child_down}")
-    
-    # Add edges for upward traversal and sibling transitions
-    def add_upward_edges_callback(agent_name: str, tree: AgentTree) -> None:
-        """Callback to add upward edges and sibling transitions to the LangGraph."""
-        if tree.is_root(agent_name):
-            # Root node's upward pass ends the graph
-            lg_node_up = f"{agent_name}_up"
-            graph_builder.add_edge(lg_node_up, END)
-            logger.debug(f"Added edge: {lg_node_up} -> END")
-            return
-        
-        agent_parent = tree.get_parent(agent_name)
-        agent_siblings = tree.get_children(agent_parent)
-        
-        # Find this node's position among siblings
-        try:
-            idx = agent_siblings.index(agent_name)
-            
-            if idx < len(agent_siblings) - 1:
-                # If not the last sibling, connect to next sibling's downward
-                agent_next_sibling = agent_siblings[idx + 1]
-                lg_node_up = f"{agent_name}_up"
-                lg_next_sibling_down = f"{agent_next_sibling}_down"
-                graph_builder.add_edge(lg_node_up, lg_next_sibling_down)
-                logger.debug(f"Added sibling transition: {lg_node_up} -> {lg_next_sibling_down}")
-            else:
-                # If last sibling, connect to parent's upward
-                lg_node_up = f"{agent_name}_up"
-                lg_parent_up = f"{agent_parent}_up"
-                graph_builder.add_edge(lg_node_up, lg_parent_up)
-                logger.debug(f"Added upward edge: {lg_node_up} -> {lg_parent_up}")
-        except ValueError:
-            # Fallback if node not found in siblings
-            lg_node_up = f"{agent_name}_up"
-            lg_parent_up = f"{agent_parent}_up"
-            graph_builder.add_edge(lg_node_up, lg_parent_up)
-            logger.debug(f"Added fallback upward edge: {lg_node_up} -> {lg_parent_up}")
-    
-    # Add leaf node transitions from downward to upward
-    def add_leaf_transitions_callback(agent_name: str, tree: AgentTree) -> None:
-        """Callback to add transitions from downward to upward for leaf nodes."""
-        if tree.is_leaf(agent_name):
-            lg_node_down = f"{agent_name}_down"
-            lg_node_up = f"{agent_name}_up"
-            graph_builder.add_edge(lg_node_down, lg_node_up)
-            logger.debug(f"Added leaf transition: {lg_node_down} -> {lg_node_up}")
-    
-    # Add all edges to the LangGraph
-    agent_tree.perform_down_traversal(node_callback=add_downward_edges_callback)
-    agent_tree.perform_down_traversal(node_callback=add_leaf_transitions_callback)
-    agent_tree.perform_up_traversal(node_callback=add_upward_edges_callback)
-    
-    # Set the entry point to the root node's downward pass
+    down_list = agent_tree.perform_down_traversal(node_callback=add_lg_node_edge)
+    up_list = agent_tree.perform_up_traversal(node_callback=add_lg_node_edge)
+    graph_builder.add_edge(down_list[-1]+'_down', up_list[0]+'_up')
+    graph_builder.add_edge(down_list[0]+'_up', END)
+
     root_node = agent_tree.get_root()
     graph_builder.set_entry_point(f"{root_node}_down")
     logger.info(f"Set entry point to {root_node}_down")
@@ -382,59 +318,3 @@ def run_bidirectional_graph(
         logger.error(f"Error during graph execution: {e}")
         raise
 
-
-def test_tree_traversal(child_per_parent: int = 3, depth: int = 2):
-    """Test the tree traversal functions.
-    
-    Args:
-        child_per_parent: The number of children each non-leaf node has.
-        depth: The number of levels in the tree.
-    """
-    # Set up logging
-    setup_detailed_logging(log_level="debug", only_local_logs=True)
-    
-    logger.info(f"Testing tree traversal with {child_per_parent} children per parent and {depth} levels")
-    
-    # Create agent tree using NetworkX
-    agent_tree = create_agent_tree(child_per_parent, depth)
-    
-    # Log the tree structure
-    logger.info("Tree structure:")
-    for node_name in agent_tree.graph.nodes():
-        parent = agent_tree.get_parent(node_name)
-        children = agent_tree.get_children(node_name)
-        parent_info = f"parent={parent}" if parent else "root"
-        children_info = f"children={children}" if children else "leaf"
-        logger.info(f"  {node_name}: {parent_info}, {children_info}")
-    
-    # Visualize the tree
-    agent_tree.visualize()
-    
-    # Get the traversal paths
-    downward_nodes = agent_tree.perform_down_traversal(
-        node_callback=lambda node, tree: logger.debug(f"Downward traversal visiting node: {node}")
-    )
-    leaf_nodes = agent_tree.get_leaf_nodes()
-    upward_nodes = agent_tree.perform_up_traversal(
-        leaf_nodes,
-        node_callback=lambda node, tree: logger.debug(f"Upward traversal visiting node: {node}")
-    )
-    
-    # Log the results
-    logger.info(f"Downward traversal visited {len(downward_nodes)} nodes: {downward_nodes}")
-    logger.info(f"Found {len(leaf_nodes)} leaf nodes: {leaf_nodes}")
-    logger.info(f"Upward traversal processed {len(upward_nodes)} nodes: {upward_nodes}")
-    
-    # Verify that all nodes were visited
-    all_nodes = set(agent_tree.graph.nodes())
-    if set(downward_nodes) == all_nodes and set(upward_nodes) == all_nodes:
-        logger.info("All nodes were visited in both traversals")
-    else:
-        missing_down = all_nodes - set(downward_nodes)
-        missing_up = all_nodes - set(upward_nodes)
-        if missing_down:
-            logger.warning(f"Nodes missed in downward traversal: {missing_down}")
-        if missing_up:
-            logger.warning(f"Nodes missed in upward traversal: {missing_up}")
-    
-    return agent_tree 
