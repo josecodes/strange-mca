@@ -16,7 +16,6 @@ from dotenv import load_dotenv
 
 from src.strange_mca.graph import create_execution_graph, run_execution_graph
 from src.strange_mca.visualization import print_agent_details, print_agent_tree, visualize_agent_graph
-from src.strange_mca.logging_utils import setup_detailed_logging
 
 # Set up logger
 logger = logging.getLogger("strange_mca")
