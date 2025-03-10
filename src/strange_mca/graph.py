@@ -21,6 +21,7 @@ class State(TypedDict):
     nodes: Dict[str, Dict[str, str]]
     current_node: str
     final_response: str
+    strange_loop_prompt: str
 
 def create_task_decomposition_prompt(task: str, context: str, child_nodes: List[str]) -> str:
     """Create a prompt for task decomposition.
@@ -86,6 +87,42 @@ Your task is to:
 Format your response as a well-structured summary."""
 
 
+
+def create_strange_loop_prompt(original_task: str, tentative_response: str) -> str:
+    """Create a prompt for the strange loop.
+    
+    Args:
+        task: The original task to complete.
+        tentative_response: The tentative response from the team.
+    """
+    return f"""
+    You are the leader of a team of llm-based agents assiged a task. 
+    
+    This is hard to coordinate well and get it perfectly.
+
+    You were given the following task to complete:
+    
+    **************************************************
+    Task: {original_task}
+    **************************************************
+
+    You and your team have produced this response:
+
+    Tentative Response: 
+    **************************************************
+    {tentative_response}
+    **************************************************
+    
+    You are now given the opportunity to revise the response.
+
+    Your task is to:
+    1. Did your team come up with the best answer you could?
+    2. Review your teams work carefully. 
+    3. Are there any parts of the response that you think could be improved?
+    4. There is no need to explain that you are working with a team of agents.
+    5. There is no need to provide headers like "Final Response" or anything like that.
+    6. Provide the best final answer you can that meets the orignal task. 
+    """
 
 def create_execution_graph(
     child_per_parent: int = 3,
@@ -207,7 +244,10 @@ def create_execution_graph(
             nodes[lg_node_name]["response"] = response
             if agent_tree.is_root(agent_name):
                 logger.debug(f"[{lg_node_name}] Processing root node synthesis (upward pass)")
-                state_updates["final_response"] = response
+                strange_loop_prompt = create_strange_loop_prompt(state["original_task"], response)
+                state_updates["strange_loop_prompt"] = strange_loop_prompt
+                final_response = agent.run(task=strange_loop_prompt)
+                state_updates["final_response"] = final_response
         return state_updates
     
 
@@ -239,19 +279,8 @@ def create_execution_graph(
     
     # Generate visualization if requested
     if langgraph_viz_dir:
-        # Create directory if it doesn't exist
-        os.makedirs(langgraph_viz_dir, exist_ok=True)
-        
-        # Create langgraph-specific output path
-        lg_viz_path = os.path.join(langgraph_viz_dir, "langgraph_structure")
-        
-        try:
-            png_data = compiled_lg_graph.get_graph().draw_mermaid_png()
-            with open(f"{lg_viz_path}.png", "wb") as f:
-                f.write(png_data)
-            logger.info(f"LangGraph visualization saved to {lg_viz_path}.png")
-        except Exception as e:
-            logger.warn(f"Could not generate graph visualization: {e}")
+        from src.strange_mca.visualization import visualize_langgraph
+        visualize_langgraph(compiled_lg_graph, langgraph_viz_dir)
     
     return compiled_lg_graph
 
