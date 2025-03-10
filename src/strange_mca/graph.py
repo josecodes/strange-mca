@@ -96,9 +96,8 @@ def create_strange_loop_prompt(original_task: str, tentative_response: str) -> s
         tentative_response: The tentative response from the team.
     """
     return f"""
-    You are the leader of a team of llm-based agents assiged a task. 
     
-    This is hard to coordinate well and get it perfectly.
+    You are the leader of a team of AI agents assiged a task. 
 
     You were given the following task to complete:
     
@@ -116,12 +115,11 @@ def create_strange_loop_prompt(original_task: str, tentative_response: str) -> s
     You are now given the opportunity to revise the response.
 
     Your task is to:
-    1. Did your team come up with the best answer you could?
-    2. Review your teams work carefully. 
-    3. Are there any parts of the response that you think could be improved?
-    4. There is no need to explain that you are working with a team of agents.
-    5. There is no need to provide headers like "Final Response" or anything like that.
-    6. Provide the best final answer you can that meets the orignal task. 
+    1. Did you and your team come up with the best answer they could?
+    2. Are there any parts of the response that you think could be improved?
+    3. There is no need to explain that you are working with a team of agents.
+    4. There is no need to provide headers like "Final Response" or anything like that.
+    5. Provide the best final answer you can that meets the orignal task. 
     """
 
 def create_execution_graph(
