@@ -22,6 +22,7 @@ class State(TypedDict):
     current_node: str
     final_response: str
     strange_loop_prompt: str
+    strange_loop_response: str
 
 def create_task_decomposition_prompt(task: str, context: str, child_nodes: List[str]) -> str:
     """Create a prompt for task decomposition.
@@ -97,30 +98,95 @@ def create_strange_loop_prompt(original_task: str, tentative_response: str) -> s
     """
     return f"""
     
-    You are the leader of a team of AI agents assiged a task. 
+    I am the leader of a team of AI agents. 
 
-    You were given the following task to complete:
-    
+    I was given the following task to complete:
+
+    Task:     
     **************************************************
-    Task: {original_task}
+    {original_task}
     **************************************************
 
-    You and your team have produced this response:
+    My team and I produced this response:
 
-    Tentative Response: 
+     Response: 
     **************************************************
     {tentative_response}
     **************************************************
     
-    You are now given the opportunity to revise the response.
+    Is that a great response for the task? If so, then simply provide that is the final response.
 
-    Your task is to:
-    1. Did you and your team come up with the best answer they could?
-    2. Are there any parts of the response that you think could be improved?
-    3. There is no need to explain that you are working with a team of agents.
-    4. There is no need to provide headers like "Final Response" or anything like that.
-    5. Provide the best final answer you can that meets the orignal task. 
+    If it could be improved upon, make some revisions and produce the final response.
+
+    Format the revised final response  with in the following format:
+    
+    Final Response:
+    **************************************************    
+    [Final response]
+    **************************************************
+
+    After this section, you can provide an explanation of reasoning for revisions made (or lack thereof).
     """
+def parse_strange_loop_response(response: str) -> str:
+    """Extract the final response from the strange loop output.
+    
+    Args:
+        response: The full response from the strange loop prompt.
+        
+    Returns:
+        The extracted final response text, or the original response if no final response section found.
+    """
+    # Handle empty or None response
+    if not response:
+        return ""
+    
+    # Try to find the final response section using regex pattern matching
+    import re
+    pattern = r"Final Response:\s*\n\*{10,}\s*\n(.*?)\n\*{10,}"
+    match = re.search(pattern, response, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    
+    # If regex fails, try line-by-line parsing
+    lines = response.split('\n')
+    final_response_lines = []
+    in_final_response = False
+    found_asterisks = False
+    
+    for line in lines:
+        line_stripped = line.strip()
+        
+        # Check if we're at the "Final Response:" line
+        if line_stripped == "Final Response:" or line_stripped.startswith("Final Response:"):
+            in_final_response = False  # Not yet in the response content
+            found_asterisks = False
+            continue
+        
+        # Check if we're at the first line of asterisks after "Final Response:"
+        if not in_final_response and not found_asterisks and line_stripped.startswith('*****'):
+            found_asterisks = True
+            continue
+        
+        # Now we're in the actual response content
+        if found_asterisks and not in_final_response:
+            in_final_response = True
+            
+        # Check if we're at the closing line of asterisks
+        if in_final_response and line_stripped.startswith('*****'):
+            break
+        
+        # Add line to final response if we're in the final response section
+        if in_final_response:
+            final_response_lines.append(line)
+    
+    # If we found a final response, return it
+    if final_response_lines:
+        return '\n'.join(final_response_lines).strip()
+    
+    # If all else fails, return the original response
+    return response.strip()
+
+
 
 def create_execution_graph(
     child_per_parent: int = 3,
@@ -243,8 +309,10 @@ def create_execution_graph(
             if agent_tree.is_root(agent_name):
                 logger.debug(f"[{lg_node_name}] Processing root node synthesis (upward pass)")
                 strange_loop_prompt = create_strange_loop_prompt(state["original_task"], response)
+                strange_loop_response = agent.run(task=strange_loop_prompt)
+                final_response = parse_strange_loop_response(strange_loop_response)
                 state_updates["strange_loop_prompt"] = strange_loop_prompt
-                final_response = agent.run(task=strange_loop_prompt)
+                state_updates["strange_loop_response"] = strange_loop_response
                 state_updates["final_response"] = final_response
         return state_updates
     
