@@ -273,4 +273,6 @@ def visualize_langgraph(
         # Render the graph
         output_file = dot.render(output_path, cleanup=True)
         logger.info(f"LangGraph visualization saved to {output_file}")
-        
+    except Exception as e:
+        logger.warning(f"Error visualizing LangGraph: {e}")
+        return None
