@@ -9,8 +9,9 @@ from typing import Dict, List, Optional, Tuple
 from dotenv import load_dotenv
 
 from src.strange_mca.agents import Agent, create_agent_configs
-from src.strange_mca.graph import create_graph, run_graph
-from src.strange_mca.logging_utils import DetailedLoggingCallbackHandler, setup_detailed_logging
+from src.strange_mca.graph import create_execution_graph, run_execution_graph
+from src.strange_mca.logging import setup_detailed_logging, setup_logging
+from src.strange_mca.prompts import update_agent_prompts
 from src.strange_mca.visualization import print_agent_details, print_agent_tree, visualize_agent_graph
 
 load_dotenv()
@@ -49,7 +50,7 @@ def run_multiagent_system(
     log_level: str = "warn",
     only_local_logs: bool = False,
     langgraph_viz_dir: Optional[str] = None,
-) -> tuple[str, Dict[str, str]]:
+) -> Tuple[str, Dict[str, str]]:
     """Run the multiagent system on a task using LangGraph.
     
     Args:
@@ -77,31 +78,33 @@ def run_multiagent_system(
         # Update agent prompts
         agent_configs = update_agent_prompts(agent_configs, child_per_parent, depth)
         
-        # Create the LangGraph
-        graph = create_graph(
+        # Create the execution graph
+        graph = create_execution_graph(
             child_per_parent=child_per_parent, 
             depth=depth, 
             model_name=model_name, 
             langgraph_viz_dir=langgraph_viz_dir
         )
         
-        # Run the graph with the appropriate log level
-        result = run_graph(
-            graph=graph,
+        # Run the execution graph
+        result = run_execution_graph(
+            execution_graph=graph,
             task=task,
-            context=context,
             log_level=log_level,
-            only_local_logs=only_local_logs
+            only_local_logs=only_local_logs,
+            langgraph_viz_dir=langgraph_viz_dir
         )
         
-        # Get all responses from the graph
-        responses = result["responses"]
-        
-        # Get the final response - prefer the final_response field if it exists
+        # Extract the final response
         final_response = result.get("final_response", "")
-        if not final_response:
-            # Fall back to the L1N1 response if no final_response is available
-            final_response = responses.get("L1N1", "No response available")
+        
+        # Extract all responses from nodes
+        responses = {}
+        for node_name, node_data in result.get("nodes", {}).items():
+            if "response" in node_data:
+                # Extract agent name from node name (remove _up suffix)
+                agent_name = node_name.split("_")[0] if "_" in node_name else node_name
+                responses[agent_name] = node_data["response"]
         
         # Log responses if verbose
         if verbose:
@@ -113,6 +116,7 @@ def run_multiagent_system(
         
     except Exception as e:
         logging.error(f"Error running multiagent system: {e}")
+        raise
 
 
 

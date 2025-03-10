@@ -15,7 +15,7 @@ import pprint
 from typing import Optional
 from dotenv import load_dotenv
 
-from src.strange_mca.graph import create_bidirectional_graph, run_bidirectional_graph
+from src.strange_mca.graph import create_execution_graph, run_execution_graph
 from src.strange_mca.logging_utils import setup_detailed_logging
 
 # Set up logger
@@ -73,7 +73,7 @@ def main():
     
     # Create the bidirectional graph
     logger.info("Creating bidirectional graph...")
-    graph = create_bidirectional_graph(
+    graph = create_execution_graph(
         child_per_parent=args.child_per_parent,
         depth=args.depth,
         model_name=args.model_name,
@@ -82,8 +82,8 @@ def main():
     
     # Run the graph
     logger.info("Running bidirectional graph...")
-    result = run_bidirectional_graph(
-        graph=graph,
+    result = run_execution_graph(
+        execution_graph=graph,
         task=args.task,
         log_level=args.log_level,
         only_local_logs=args.only_local_logs,

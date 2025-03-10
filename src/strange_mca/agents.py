@@ -85,7 +85,7 @@ class AgentTree:
         """
         self.child_per_parent = child_per_parent
         self.depth = depth
-        self.graph = nx.DiGraph()
+        self.mca_graph = nx.DiGraph()
         
         # Build the tree structure
         self._build_tree()
@@ -100,7 +100,7 @@ class AgentTree:
             node_number=1
         )
         # Add the root node to the graph with its config as a node attribute
-        self.graph.add_node(root_name, config=root_config)
+        self.mca_graph.add_node(root_name, config=root_config)
         
         # Create the rest of the tree
         for level in range(2, self.depth + 1):
@@ -121,49 +121,49 @@ class AgentTree:
                     )
                     
                     # Add the child node to the graph with its config as a node attribute
-                    self.graph.add_node(child_name, config=child_config)
+                    self.mca_graph.add_node(child_name, config=child_config)
                     
                     # Add the edge from parent to child
-                    self.graph.add_edge(parent_name, child_name)
+                    self.mca_graph.add_edge(parent_name, child_name)
         
         # Validate the graph
-        if not nx.is_directed_acyclic_graph(self.graph):
+        if not nx.is_directed_acyclic_graph(self.mca_graph):
             raise ValueError("The tree structure contains cycles, which is not allowed")
     
     def get_config(self, node_name: str) -> AgentConfig:
         """Get the configuration for a node."""
-        return self.graph.nodes[node_name]['config']
+        return self.mca_graph.nodes[node_name]['config']
     
     def get_configs(self) -> Dict[str, AgentConfig]:
         """Get all configurations as a dictionary."""
-        return {node: data['config'] for node, data in self.graph.nodes(data=True)}
+        return {node: data['config'] for node, data in self.mca_graph.nodes(data=True)}
     
     def is_leaf(self, node_name: str) -> bool:
         """Return whether a node is a leaf node."""
-        return len(list(self.graph.successors(node_name))) == 0
+        return len(list(self.mca_graph.successors(node_name))) == 0
     
     def is_root(self, node_name: str) -> bool:
         """Return whether a node is the root node."""
-        return len(list(self.graph.predecessors(node_name))) == 0
+        return len(list(self.mca_graph.predecessors(node_name))) == 0
     
     def get_root(self) -> str:
         """Get the name of the root node."""
-        for node in self.graph.nodes():
+        for node in self.mca_graph.nodes():
             if self.is_root(node):
                 return node
         return None
     
     def get_leaf_nodes(self) -> List[str]:
         """Get the names of all leaf nodes."""
-        return [node for node in self.graph.nodes() if self.is_leaf(node)]
+        return [node for node in self.mca_graph.nodes() if self.is_leaf(node)]
     
     def get_children(self, node_name: str) -> List[str]:
         """Get the children of a node."""
-        return list(self.graph.successors(node_name))
+        return list(self.mca_graph.successors(node_name))
     
     def get_parent(self, node_name: str) -> Optional[str]:
         """Get the parent of a node."""
-        parents = list(self.graph.predecessors(node_name))
+        parents = list(self.mca_graph.predecessors(node_name))
         return parents[0] if parents else None
     
     def perform_down_traversal(
@@ -185,7 +185,7 @@ class AgentTree:
             start_node = self.get_root()
         
         # Use NetworkX's BFS to traverse the tree downward
-        traversal = list(nx.bfs_tree(self.graph, source=start_node))
+        traversal = list(nx.bfs_tree(self.mca_graph, source=start_node))
         
         # Execute callback for each node if provided
         if node_callback:
@@ -212,7 +212,7 @@ class AgentTree:
         leaf_nodes = self.get_leaf_nodes()
         
         # Create a reversed graph for upward traversal
-        reversed_graph = self.graph.reverse()
+        reversed_graph = self.mca_graph.reverse()
         
         # Track processed nodes and their order
         processed = []
@@ -277,7 +277,7 @@ class AgentTree:
             dot.node(node_name, label=node_label, shape=node_shape, style='filled', fillcolor=node_color)
         
         # Add edges
-        for edge in self.graph.edges():
+        for edge in self.mca_graph.edges():
             source, target = edge
             dot.edge(source, target)
         

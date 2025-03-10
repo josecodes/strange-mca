@@ -87,7 +87,7 @@ Format your response as a well-structured summary."""
 
 
 
-def create_bidirectional_graph(
+def create_execution_graph(
     child_per_parent: int = 3,
     depth: int = 2,
     model_name: str = "gpt-3.5-turbo",
@@ -116,13 +116,13 @@ def create_bidirectional_graph(
     
     # Create a dictionary to store agents for each node
     agents = {}
-    for agent_name in agent_tree.graph.nodes():
+    for agent_name in agent_tree.mca_graph.nodes():
         config = agent_tree.get_config(agent_name)
         agents[agent_name] = Agent(config, model_name=model_name)
         logger.debug(f"Created agent for {agent_name}")
     
     # Initialize the graph builder
-    graph_builder = StateGraph(State)
+    lg_graph_builder = StateGraph(State)
     
     def down_function(state: State, lg_node_name: str) -> Dict[str, Any]:
         """Process a node in the downward pass (task decomposition)."""
@@ -218,23 +218,23 @@ def create_bidirectional_graph(
             direction_function = down_function
         else:
             direction_function = up_function
-        graph_builder.add_node(lg_node, lambda s: direction_function(s, lg_node))
+        lg_graph_builder.add_node(lg_node, lambda s: direction_function(s, lg_node))
         if predecessor_node is not None:
-            graph_builder.add_edge(predecessor_node+f"_{direction}", lg_node)
+            lg_graph_builder.add_edge(predecessor_node+f"_{direction}", lg_node)
             logger.debug(f"Added {direction} edge: {predecessor_node}_{direction} -> {lg_node}")
         
         
     down_list = agent_tree.perform_down_traversal(node_callback=add_lg_node_edge)
     up_list = agent_tree.perform_up_traversal(node_callback=add_lg_node_edge)
-    graph_builder.add_edge(down_list[-1]+'_down', up_list[0]+'_up')
-    graph_builder.add_edge(down_list[0]+'_up', END)
+    lg_graph_builder.add_edge(down_list[-1]+'_down', up_list[0]+'_up')
+    lg_graph_builder.add_edge(down_list[0]+'_up', END)
 
     root_node = agent_tree.get_root()
-    graph_builder.set_entry_point(f"{root_node}_down")
+    lg_graph_builder.set_entry_point(f"{root_node}_down")
     logger.info(f"Set entry point to {root_node}_down")
     
     # Compile the graph
-    compiled_graph = graph_builder.compile()
+    compiled_lg_graph = lg_graph_builder.compile()
     logger.info("Compiled LangGraph successfully")
     
     # Generate visualization if requested
@@ -246,18 +246,18 @@ def create_bidirectional_graph(
         lg_viz_path = os.path.join(langgraph_viz_dir, "langgraph_structure")
         
         try:
-            png_data = compiled_graph.get_graph().draw_mermaid_png()
+            png_data = compiled_lg_graph.get_graph().draw_mermaid_png()
             with open(f"{lg_viz_path}.png", "wb") as f:
                 f.write(png_data)
             logger.info(f"LangGraph visualization saved to {lg_viz_path}.png")
         except Exception as e:
             logger.warn(f"Could not generate graph visualization: {e}")
     
-    return compiled_graph
+    return compiled_lg_graph
 
 
-def run_bidirectional_graph(
-    graph,
+def run_execution_graph(
+    execution_graph,
     task: str,
     log_level: str = "warn",
     only_local_logs: bool = False,
@@ -284,7 +284,7 @@ def run_bidirectional_graph(
     
     # Find the root node of the graph
     at_root_node = None
-    for lg_node in graph.get_graph().nodes:
+    for lg_node in execution_graph.get_graph().nodes:
         if lg_node.endswith("_down") and "_" not in lg_node.split("_down")[0]:
             at_root_node = lg_node.split("_down")[0]
             break
@@ -312,7 +312,7 @@ def run_bidirectional_graph(
             callbacks=[callback_handler],
             recursion_limit=100 #TODO: calculate this?
         )
-        result = graph.invoke(initial_state, config=config)
+        result = execution_graph.invoke(initial_state, config=config)
         return result
     except Exception as e:
         logger.error(f"Error during graph execution: {e}")
