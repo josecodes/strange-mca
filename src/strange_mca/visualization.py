@@ -32,7 +32,7 @@ def visualize_agent_graph(
     
     # Create a new graph
     dot = graphviz.Digraph(
-        "Agent Graph",
+        "Agent Tree",
         comment="Visualization of the multiagent system",
         format=format,
     )
@@ -152,7 +152,7 @@ def print_agent_details(agent_configs: Dict[str, AgentConfig]) -> None:
 def visualize_langgraph(
     graph: Any,
     output_dir: str,
-    filename: str = "langgraph_structure",
+    filename: str = "execution_graph_lg",
     use_local_rendering: bool = True  # Keep for backward compatibility
 ) -> Optional[str]:
     """Visualize a LangGraph structure using Graphviz.
@@ -178,7 +178,7 @@ def visualize_langgraph(
     try:
         # Create a new Graphviz graph
         dot = graphviz.Digraph(
-            "LangGraph Structure",
+            "Execution Graph",
             comment="Visualization of the LangGraph structure",
             format="png",
         )
@@ -194,10 +194,10 @@ def visualize_langgraph(
         # Add a title to the graph
         try:
             depth = len(set([n.split('_')[0][1:2] for n in lg_graph.nodes if n not in ['__start__', '__end__']]))
-            dot.attr(label=f"LangGraph Structure\nDepth: {depth}\nNodes: {len(lg_graph.nodes)}", fontsize="14", fontname="Arial Bold")
+            dot.attr(label=f"Execution Graph\nDepth: {depth}\nNodes: {len(lg_graph.nodes)}", fontsize="14", fontname="Arial Bold")
         except Exception:
             # Fallback if we can't determine the depth
-            dot.attr(label=f"LangGraph Structure\nNodes: {len(lg_graph.nodes)}", fontsize="14", fontname="Arial Bold")
+            dot.attr(label=f"Execution Graph\nNodes: {len(lg_graph.nodes)}", fontsize="14", fontname="Arial Bold")
         
         # Add nodes
         for node in lg_graph.nodes:
@@ -259,7 +259,8 @@ def visualize_langgraph(
         
         # Render the graph
         output_file = dot.render(output_path, cleanup=True)
-        logger.info(f"LangGraph visualization saved to {output_file}")
+        logger.info(f"Execution graph visualization saved to {output_file}")
+        return output_file
     except Exception as e:
-        logger.warning(f"Error visualizing LangGraph: {e}")
+        logger.warning(f"Error visualizing execution graph: {e}")
         return None

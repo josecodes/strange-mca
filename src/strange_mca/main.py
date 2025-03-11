@@ -120,11 +120,11 @@ def main():
         agent_configs = create_agent_configs(args.child_per_parent, args.depth)
         output_file = visualize_agent_graph(
             agent_configs,
-            output_path=os.path.join(output_dir, "agent_graph"),
+            output_path=os.path.join(output_dir, "agent_tree_nx"),
             format="png",
         )
         if output_file:
-            logger.info(f"Agent visualization saved to {output_file}")
+            logger.info(f"Agent tree visualization saved to {output_file}")
     
     # Exit if this is a dry run
     if args.dry_run:

@@ -135,41 +135,26 @@ def parse_strange_loop_response(response: str) -> str:
     if match:
         return match.group(1).strip()
     
-    # If regex fails, try line-by-line parsing
-    lines = response.split('\n')
-    final_response_lines = []
-    in_final_response = False
-    found_asterisks = False
-    
-    for line in lines:
-        line_stripped = line.strip()
-        
-        # Check if we're at the "Final Response:" line
-        if line_stripped == "Final Response:" or line_stripped.startswith("Final Response:"):
-            in_final_response = False  # Not yet in the response content
-            found_asterisks = False
-            continue
-        
-        # Check if we're at the first line of asterisks after "Final Response:"
-        if not in_final_response and not found_asterisks and line_stripped.startswith('*****'):
-            found_asterisks = True
-            continue
-        
-        # Now we're in the actual response content
-        if found_asterisks and not in_final_response:
-            in_final_response = True
-            
-        # Check if we're at the closing line of asterisks
-        if in_final_response and line_stripped.startswith('*****'):
-            break
-        
-        # Add line to final response if we're in the final response section
-        if in_final_response:
-            final_response_lines.append(line)
-    
-    # If we found a final response, return it
-    if final_response_lines:
-        return '\n'.join(final_response_lines).strip()
-    
-    # If all else fails, return the original response
-    return response.strip() 
+    # # If regex fails, try line-by-line parsing
+    # lines = response.split('\n')
+    # final_response_lines = []
+    # in_final_response = False
+    # found_asterisks = False  
+    # for line in lines:
+    #     line_stripped = line.strip()
+    #     if line_stripped == "Final Response:" or line_stripped.startswith("Final Response:"):
+    #         in_final_response = False
+    #         found_asterisks = False
+    #         continue
+    #     if not in_final_response and not found_asterisks and line_stripped.startswith('*****'):
+    #         found_asterisks = True
+    #         continue
+    #     if found_asterisks and not in_final_response:
+    #         in_final_response = True
+    #     if in_final_response and line_stripped.startswith('*****'):
+    #         break
+    #     if in_final_response:
+    #         final_response_lines.append(line)
+    # if final_response_lines:
+    #     return '\n'.join(final_response_lines).strip()
+    # return response.strip()
