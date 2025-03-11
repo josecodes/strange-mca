@@ -30,7 +30,7 @@ def run_strange_mca(
     model: str = "gpt-3.5-turbo",
     log_level: str = "info",
     viz: bool = True,
-    only_local_logs: bool = False,
+    all_logs: bool = False,
     print_details: bool = True,
     output_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -44,7 +44,7 @@ def run_strange_mca(
         model: The model to use.
         log_level: The log level to use.
         viz: Whether to generate visualizations.
-        only_local_logs: Whether to only use local logs.
+        all_logs: Whether to show logs from dependencies in addition to local logs.
         print_details: Whether to print detailed information.
         output_dir: The output directory to use. If None, a directory will be created.
         
@@ -55,7 +55,11 @@ def run_strange_mca(
     numeric_level = getattr(logging, log_level.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError(f"Invalid log level: {log_level}")
-    logging.basicConfig(level=numeric_level)
+    
+    if all_logs:
+        logging.basicConfig(level=numeric_level)
+    else:
+        logging.basicConfig(level=numeric_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     
     # Create output directory if not provided
     if output_dir is None:
@@ -102,7 +106,7 @@ def run_strange_mca(
         execution_graph=graph,
         task=task,
         log_level=log_level,
-        only_local_logs=only_local_logs,
+        only_local_logs=not all_logs,  # Invert the behavior
         langgraph_viz_dir=None  # We've already handled visualization
     )
     
@@ -161,4 +165,5 @@ if __name__ == "__main__":
         model="gpt-3.5-turbo",
         log_level="info",
         viz=True,
+        all_logs=False,
     ) 

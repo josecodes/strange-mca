@@ -59,11 +59,10 @@ def main():
                         help="The number of levels in the tree")
     parser.add_argument("--model", type=str, default="gpt-3.5-turbo",
                         help="The name of the LLM model to use")
-    parser.add_argument("--log_level", type=str, default="warn",
-                        choices=["debug", "info", "warn", "error"],
-                        help="The log level to use")
-    parser.add_argument("--only_local_logs", action="store_true",
-                        help="Only show logs from this script, not from dependencies")
+    parser.add_argument("--log_level", type=str, default="info",
+                        help="Logging level (debug, info, warning, error, critical)")
+    parser.add_argument("--all_logs", action="store_true",
+                        help="Show logs from dependencies in addition to local logs")
     parser.add_argument("--viz", action="store_true",
                         help="Generate visualizations of the agent tree and execution graph")
     parser.add_argument("--dry_run", action="store_true",
@@ -77,10 +76,10 @@ def main():
     
     # Set up logging
     log_level = getattr(logging, args.log_level.upper())
-    if args.only_local_logs:
-        logging.basicConfig(level=log_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    else:
+    if args.all_logs:
         logging.basicConfig(level=log_level)
+    else:
+        logging.basicConfig(level=log_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     
     # Generate output directory
     output_dir = create_output_dir(args.child_per_parent, args.depth, args.model)
@@ -148,7 +147,7 @@ def main():
         execution_graph=graph,
         task=args.task,
         log_level=args.log_level,
-        only_local_logs=args.only_local_logs,
+        only_local_logs=args.all_logs,
         langgraph_viz_dir=None  # We've already handled visualization
     )
     
