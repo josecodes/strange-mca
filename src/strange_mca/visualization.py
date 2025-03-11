@@ -30,35 +30,32 @@ def visualize_agent_graph(
     # Ensure the output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
-    # Build a tree structure from the agent_configs
-    tree = {}
-    for name, config in agent_configs.items():
-        level = config.level
-        if level not in tree:
-            tree[level] = []
-        tree[level].append(name)
-    
-    # Build parent-child relationships
-    children = {}
-    for level in sorted(tree.keys())[1:]:  # Skip level 1 (root)
-        parent_level = level - 1
-        for name in tree[level]:
-            # Extract parent information from the name
-            # Assuming names follow the pattern "L{level}N{number}"
-            node_number = int(name.split('N')[1])
-            parent_number = (node_number + 1) // 2  # Simple formula to find parent
-            parent_name = f"L{parent_level}N{parent_number}"
-            
-            if parent_name not in children:
-                children[parent_name] = []
-            children[parent_name].append(name)
-    
     # Create a new graph
     dot = graphviz.Digraph(
         "Agent Graph",
         comment="Visualization of the multiagent system",
         format=format,
     )
+    
+    # Extract child_per_parent and depth from the agent_configs
+    # We need these to create an AgentTree
+    max_level = max(config.level for config in agent_configs.values())
+    depth = max_level
+    
+    # Count children for the first parent to determine child_per_parent
+    # Assuming all parents have the same number of children
+    level_1_nodes = [name for name, config in agent_configs.items() if config.level == 1]
+    if level_1_nodes:
+        root_node = level_1_nodes[0]
+        level_2_nodes = [name for name, config in agent_configs.items() if config.level == 2]
+        child_per_parent = len(level_2_nodes)
+    else:
+        # Default to 2 if we can't determine
+        child_per_parent = 2
+    
+    # Create an AgentTree to get parent-child relationships
+    from src.strange_mca.agents import AgentTree
+    agent_tree = AgentTree(child_per_parent, depth)
     
     # Add nodes
     for name, config in agent_configs.items():
@@ -71,10 +68,11 @@ def visualize_agent_graph(
         # Add the node
         dot.node(name, label, style="filled", fillcolor=color)
     
-    # Add edges
-    for parent, child_list in children.items():
-        for child in child_list:
-            dot.edge(parent, child)
+    # Add edges using the AgentTree
+    for name in agent_configs.keys():
+        parent = agent_tree.get_parent(name)
+        if parent:
+            dot.edge(parent, name)
     
     # Render the graph
     try:
@@ -93,35 +91,24 @@ def print_agent_tree(agent_configs: Dict[str, AgentConfig]) -> None:
     Args:
         agent_configs: Dictionary mapping agent names to their configurations.
     """
-    # Build a tree structure from the agent_configs
-    tree = {}
-    for name, config in agent_configs.items():
-        level = config.level
-        if level not in tree:
-            tree[level] = []
-        tree[level].append(name)
+    # Extract child_per_parent and depth from the agent_configs
+    max_level = max(config.level for config in agent_configs.values())
+    depth = max_level
     
-    # Find the root node (the only node at level 1)
-    if 1 not in tree or len(tree[1]) != 1:
-        print("Error: Could not find a unique root node at level 1")
-        return
+    # Count children for the first parent to determine child_per_parent
+    level_1_nodes = [name for name, config in agent_configs.items() if config.level == 1]
+    if level_1_nodes:
+        root_node = level_1_nodes[0]
+        level_2_nodes = [name for name, config in agent_configs.items() if config.level == 2]
+        child_per_parent = len(level_2_nodes)
+    else:
+        # Default to 2 if we can't determine
+        child_per_parent = 2
+        root_node = list(agent_configs.keys())[0]  # Just use the first node
     
-    root = tree[1][0]
-    
-    # Build parent-child relationships
-    children = {}
-    for level in sorted(tree.keys())[1:]:  # Skip level 1 (root)
-        parent_level = level - 1
-        for name in tree[level]:
-            # Extract parent information from the name
-            # Assuming names follow the pattern "L{level}N{number}"
-            node_number = int(name.split('N')[1])
-            parent_number = (node_number + 1) // 2  # Simple formula to find parent
-            parent_name = f"L{parent_level}N{parent_number}"
-            
-            if parent_name not in children:
-                children[parent_name] = []
-            children[parent_name].append(name)
+    # Create an AgentTree to get parent-child relationships
+    from src.strange_mca.agents import AgentTree
+    agent_tree = AgentTree(child_per_parent, depth)
     
     def print_node(name: str, indent: int = 0) -> None:
         """Print a node and its children recursively.
@@ -133,11 +120,11 @@ def print_agent_tree(agent_configs: Dict[str, AgentConfig]) -> None:
         config = agent_configs[name]
         print(f"{'  ' * indent}└─ {name} (Level {config.level})")
         
-        for child in children.get(name, []):
+        for child in agent_tree.get_children(name):
             print_node(child, indent + 1)
     
     print("Agent Tree:")
-    print_node(root)
+    print_node(root_node)
 
 
 def print_agent_details(agent_configs: Dict[str, AgentConfig]) -> None:

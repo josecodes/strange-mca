@@ -247,7 +247,7 @@ def run_execution_graph(
         # Run the graph with the initial state
         config = RunnableConfig(
             callbacks=[callback_handler],
-            recursion_limit=100 #TODO: calculate this?
+            recursion_limit=1000 #TODO: calculate this?
         )
         result = execution_graph.invoke(initial_state, config=config)
         return result

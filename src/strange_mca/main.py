@@ -11,14 +11,38 @@ import json
 import logging
 import os
 import pprint
+import datetime
 from typing import Dict, Optional
 from dotenv import load_dotenv
 
 from src.strange_mca.graph import create_execution_graph, run_execution_graph
-from src.strange_mca.visualization import print_agent_details, print_agent_tree, visualize_agent_graph
+from src.strange_mca.visualization import (
+    print_agent_details,
+    print_agent_tree,
+    visualize_agent_graph,
+    visualize_langgraph
+)
 
 # Set up logger
 logger = logging.getLogger("strange_mca")
+
+def create_output_dir(child_per_parent: int, depth: int, model: str) -> str:
+    """Generate an output directory name based on timestamp, child_per_parent, depth, and model.
+    
+    Args:
+        child_per_parent: Number of children per parent.
+        depth: Depth of the tree.
+        model: Model name.
+        
+    Returns:
+        Path to the output directory.
+    """
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_short = model.split("-")[-1] if "-" in model else model
+    dir_name = f"{timestamp}_c{child_per_parent}_d{depth}_{model_short}"
+    output_dir = os.path.join("output", dir_name)
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
 
 def main():
     """Run the main script."""
@@ -40,16 +64,16 @@ def main():
                         help="The log level to use")
     parser.add_argument("--only_local_logs", action="store_true",
                         help="Only show logs from this script, not from dependencies")
-    parser.add_argument("--output", type=str, default="output",
-                        help="Directory to save visualizations and outputs")
+    parser.add_argument("--viz", action="store_true",
+                        help="Generate visualizations of the agent structure")
+    parser.add_argument("--local_viz", action="store_true",
+                        help="Use local Graphviz rendering instead of Mermaid.INK API")
+    parser.add_argument("--dry_run", action="store_true",
+                        help="Don't run the system, just show the configuration")
     parser.add_argument("--print_tree", action="store_true",
                         help="Print the agent tree structure")
     parser.add_argument("--print_details", action="store_true",
                         help="Print details about each agent")
-    parser.add_argument("--viz", action="store_true",
-                        help="Generate visualizations of the agent structure")
-    parser.add_argument("--dry_run", action="store_true",
-                        help="Don't run the system, just show the configuration")
     
     args = parser.parse_args()
     
@@ -60,8 +84,9 @@ def main():
     else:
         logging.basicConfig(level=log_level)
     
-    # Create output directory if it doesn't exist
-    os.makedirs(args.output, exist_ok=True)
+    # Generate output directory
+    output_dir = create_output_dir(args.child_per_parent, args.depth, args.model)
+    logger.info(f"Output directory: {output_dir}")
     
     # Print configuration
     logger.info(f"Running with the following parameters:")
@@ -69,7 +94,7 @@ def main():
     logger.info(f"  Children per parent: {args.child_per_parent}")
     logger.info(f"  Depth: {args.depth}")
     logger.info(f"  Model: {args.model}")
-    logger.info(f"  Output directory: {args.output}")
+    logger.info(f"  Output directory: {output_dir}")
     
     # Calculate the total number of agents
     total_agents = sum(args.child_per_parent ** (i - 1) for i in range(1, args.depth + 1))
@@ -95,7 +120,7 @@ def main():
         agent_configs = create_agent_configs(args.child_per_parent, args.depth)
         output_file = visualize_agent_graph(
             agent_configs,
-            output_path=os.path.join(args.output, "agent_graph"),
+            output_path=os.path.join(output_dir, "agent_graph"),
             format="png",
         )
         if output_file:
@@ -112,8 +137,12 @@ def main():
         child_per_parent=args.child_per_parent,
         depth=args.depth,
         model_name=args.model,
-        langgraph_viz_dir=args.output if args.viz else None
+        langgraph_viz_dir=None  # We'll handle visualization separately
     )
+    
+    # Generate LangGraph visualization if requested
+    if args.viz:
+        visualize_langgraph(graph, output_dir, use_local_rendering=args.local_viz)
     
     # Run the execution graph
     logger.info("Running execution graph...")
@@ -122,7 +151,7 @@ def main():
         task=args.task,
         log_level=args.log_level,
         only_local_logs=args.only_local_logs,
-        langgraph_viz_dir=args.output if args.viz else None
+        langgraph_viz_dir=None  # We've already handled visualization
     )
     
     # Print the final response
@@ -132,7 +161,31 @@ def main():
     print(result.get("final_response", "No final response generated"))
     print("=" * 80)
     
-    state_file = os.path.join(args.output, "final_state.json")
+
+    if args.print_details:
+        print("\nFull State:")
+        print("=" * 80)
+        # Create a copy of the result to avoid modifying the original
+        state_copy = dict(result)
+        
+        # Format nodes dictionary for better readability
+        if "nodes" in state_copy:
+            for node_name, node_data in state_copy["nodes"].items():
+                # Truncate long responses for display
+                if "response" in node_data and len(node_data["response"]) > 500:
+                    state_copy["nodes"][node_name]["response"] = node_data["response"][:500] + "... [truncated]"
+                
+                # Truncate long tasks for display
+                if "task" in node_data and len(node_data["task"]) > 500:
+                    state_copy["nodes"][node_name]["task"] = node_data["task"][:500] + "... [truncated]"
+        
+        # Pretty print the state
+        pp = pprint.PrettyPrinter(indent=2, width=100)
+        pp.pprint(state_copy)
+        print("=" * 80)
+    
+    # Save the full state to a JSON file
+    state_file = os.path.join(output_dir, "final_state.json")
     with open(state_file, "w") as f:
         json.dump(result, f, indent=2)
     print(f"Full state saved to: {state_file}")
@@ -142,7 +195,7 @@ def main():
     print(f"Tree structure: {args.child_per_parent} children per parent, {args.depth} levels deep")
     print(f"Task: {args.task}")
     print(f"Model: {args.model}")
-    print(f"Output saved to: {args.output}")
+    print(f"Output saved to: {output_dir}")
     
     logger.info("Execution completed")
 
