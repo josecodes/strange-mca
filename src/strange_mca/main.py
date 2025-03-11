@@ -65,9 +65,7 @@ def main():
     parser.add_argument("--only_local_logs", action="store_true",
                         help="Only show logs from this script, not from dependencies")
     parser.add_argument("--viz", action="store_true",
-                        help="Generate visualizations of the agent structure")
-    parser.add_argument("--local_viz", action="store_true",
-                        help="Use local Graphviz rendering instead of Mermaid.INK API")
+                        help="Generate visualizations of the agent tree and execution graph")
     parser.add_argument("--dry_run", action="store_true",
                         help="Don't run the system, just show the configuration")
     parser.add_argument("--print_tree", action="store_true",
@@ -142,7 +140,7 @@ def main():
     
     # Generate LangGraph visualization if requested
     if args.viz:
-        visualize_langgraph(graph, output_dir, use_local_rendering=args.local_viz)
+        visualize_langgraph(graph, output_dir)
     
     # Run the execution graph
     logger.info("Running execution graph...")

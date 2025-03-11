@@ -152,8 +152,7 @@ def print_agent_details(agent_configs: Dict[str, AgentConfig]) -> None:
 def visualize_langgraph(
     graph: Any,
     output_dir: str,
-    filename: str = "execution_graph_lg",
-    use_local_rendering: bool = True  # Keep for backward compatibility
+    filename: str = "execution_graph_lg"
 ) -> Optional[str]:
     """Visualize a LangGraph structure using Graphviz.
     
@@ -164,7 +163,6 @@ def visualize_langgraph(
         graph: The compiled LangGraph to visualize.
         output_dir: Directory to save the visualization.
         filename: Base filename for the visualization (without extension).
-        use_local_rendering: Deprecated. Always uses local Graphviz rendering now.
         
     Returns:
         The path to the saved visualization file, or None if visualization failed.
