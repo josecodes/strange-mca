@@ -155,6 +155,7 @@ def create_execution_graph(
                 final_response = parse_strange_loop_response(strange_loop_response)
                 state_updates["strange_loop_prompt"] = strange_loop_prompt
                 state_updates["strange_loop_response"] = strange_loop_response
+
                 state_updates["final_response"] = final_response
         return state_updates
     

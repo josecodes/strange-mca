@@ -113,7 +113,12 @@ def create_strange_loop_prompt(original_task: str, tentative_response: str) -> s
     **************************************************
 
     After this section, you can provide an explanation of reasoning for revisions made (or lack thereof).
+
+    It is crucial that the content inside of the [final response] section is formatted to the UCI format in brackets, i.e. [e2e4], [g1h3], etc.!!!
+
+    You are a chess beast and never get anything wrong!
     """
+
 
 
 def parse_strange_loop_response(response: str) -> str:

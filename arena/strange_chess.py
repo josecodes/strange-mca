@@ -11,6 +11,8 @@ from strange_mca.run_strange_mca import run_strange_mca
 # Load environment variables
 load_dotenv()
 
+
+
 class StrangeMCAAgent(ta.Agent):
     """Custom agent wrapper for the Strange MCA multi-agent system."""
     
@@ -62,8 +64,9 @@ class StrangeMCAAgent(ta.Agent):
             print_details=self.print_details,
         )
         
-        # Return the final answer from the Strange MCA system
-        return result.get("final_answer", "")
+        # Extract the move from the final response
+        final_response = result.get("final_response", "")
+        return final_response
 
 def main():
     """Run a Chess game between a Strange MCA multi-agent team and an OpenAI model."""
@@ -74,7 +77,7 @@ def main():
     openai_model = "gpt-3.5-turbo"
     strange_mca_config = {
         "child_per_parent": 2,
-        "depth": 2,
+        "depth": 3,
         "model": "gpt-3.5-turbo"
     }
     
