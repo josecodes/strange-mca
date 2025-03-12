@@ -149,16 +149,22 @@ def create_execution_graph(
             nodes[lg_node_name]["response"] = response
             if agent_tree.is_root(agent_name):
                 logger.debug(f"[{lg_node_name}] Processing root node synthesis (upward pass)")
+                domain_specific_instructions = "I am playing in a game. I must win. My response must be an exact and valid move (no extra prose!) that meets the game's rules."
                 strange_loop_count = 3
+                if domain_specific_instructions is not None and domain_specific_instructions != "":
+                    strange_loop_count += 1
                 if strange_loop_count > 0:
                     strange_loops = []
-                    for i in range(strange_loop_count):
-                        strange_loop_prompt = create_strange_loop_prompt(state["original_task"], response)
+                    for i in range(strange_loop_count):                        
+                        if i == strange_loop_count - 1 and domain_specific_instructions:
+                            strange_loop_prompt = create_strange_loop_prompt(state["original_task"], response, domain_specific_instructions)
+                        else:
+                            strange_loop_prompt = create_strange_loop_prompt(state["original_task"], response)
                         strange_loop_response = agent.run(task=strange_loop_prompt)
                         strange_loops.append({"prompt": strange_loop_prompt, "response": strange_loop_response})
                         response = parse_strange_loop_response(strange_loop_response)
                     state_updates["strange_loops"] = strange_loops
-                state_updates["final_response"] = response
+                    state_updates["final_response"] = response
                
         return state_updates
     

@@ -73,7 +73,7 @@ Your task is to:
 Format your response as a well-structured summary."""
 
 
-def create_strange_loop_prompt(original_task: str, tentative_response: str) -> str:
+def create_strange_loop_prompt(original_task: str, tentative_response: str, domain_specific_instructions: str = "") -> str:
     """Create a prompt for the strange loop.
     
     Args:
@@ -104,8 +104,11 @@ def create_strange_loop_prompt(original_task: str, tentative_response: str) -> s
 
     If it could be improved upon, I will make revisions and produce the final response.
 
-    I will format the revised final response  with in the following format:
+    {domain_specific_instructions}
     
+    I will format the revised final response  with in the following format:
+
+
     Final Response:
     **************************************************    
     [Final response]
@@ -113,6 +116,7 @@ def create_strange_loop_prompt(original_task: str, tentative_response: str) -> s
 
     After this section, I'll provide a brief explanation of reasoning for revisions made (or lack thereof).
 
+    
     """
 
 
