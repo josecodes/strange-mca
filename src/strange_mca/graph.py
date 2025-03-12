@@ -152,10 +152,9 @@ def create_execution_graph(
                 logger.debug(f"[{lg_node_name}] Processing root node synthesis (upward pass)")
                 strange_loop_prompt = create_strange_loop_prompt(state["original_task"], response)
                 strange_loop_response = agent.run(task=strange_loop_prompt)
-                final_response = parse_strange_loop_response(strange_loop_response)
                 state_updates["strange_loop_prompt"] = strange_loop_prompt
                 state_updates["strange_loop_response"] = strange_loop_response
-
+                final_response = parse_strange_loop_response(strange_loop_response)
                 state_updates["final_response"] = final_response
         return state_updates
     

@@ -85,8 +85,7 @@ def create_strange_loop_prompt(original_task: str, tentative_response: str) -> s
     """
     return f"""
     
-    I am the leader of a team of AI agents. 
-
+ 
     I was given the following task to complete:
 
     Task:     
@@ -94,29 +93,26 @@ def create_strange_loop_prompt(original_task: str, tentative_response: str) -> s
     {original_task}
     **************************************************
 
-    My team and I produced this response:
+    I produced this response:
 
      Response: 
     **************************************************
     {tentative_response}
     **************************************************
     
-    Is that a great response for the task? If so, then simply provide that is the final response.
+    Is this the best response I can provide for the task? If so, then I'll simply provide that is the final response.
 
-    If it could be improved upon, make some revisions and produce the final response.
+    If it could be improved upon, I will make revisions and produce the final response.
 
-    Format the revised final response  with in the following format:
+    I will format the revised final response  with in the following format:
     
     Final Response:
     **************************************************    
     [Final response]
     **************************************************
 
-    After this section, you can provide an explanation of reasoning for revisions made (or lack thereof).
+    After this section, I'll provide a brief explanation of reasoning for revisions made (or lack thereof).
 
-    It is crucial that the content inside of the [final response] section is formatted to the UCI format in brackets, i.e. [e2e4], [g1h3], etc.!!!
-
-    You are a chess beast and never get anything wrong!
     """
 
 

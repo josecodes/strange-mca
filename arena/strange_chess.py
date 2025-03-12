@@ -1,78 +1,17 @@
 import os
-import re
 import sys
 from dotenv import load_dotenv
 import textarena as ta
 
 # Add the project root to the Python path to allow importing from src
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from strange_mca.run_strange_mca import run_strange_mca
+from strangemca_textarena import StrangeMCAAgent
 
 # Load environment variables
 load_dotenv()
 
-
-
-class StrangeMCAAgent(ta.Agent):
-    """Custom agent wrapper for the Strange MCA multi-agent system."""
-    
-    def __init__(
-        self,
-        child_per_parent: int = 3,
-        depth: int = 2,
-        model: str = "gpt-3.5-turbo",
-        viz: bool = False,
-        print_details: bool = False,
-    ):
-        """
-        Initialize the Strange MCA agent.
-        
-        Args:
-            child_per_parent: Number of children per parent node in the agent tree.
-            depth: Depth of the agent tree.
-            model: The model to use for the agents.
-            viz: Whether to generate visualizations.
-            print_details: Whether to print detailed information.
-        """
-        self.child_per_parent = child_per_parent
-        self.depth = depth
-        self.model = model
-        self.viz = viz
-        self.print_details = print_details
-        
-    def __call__(self, observation: str) -> str:
-        """
-        Process the observation and return an action using the Strange MCA system.
-        
-        Args:
-            observation: The observation from the environment.
-            
-        Returns:
-            The action to take.
-        """
-        # Create a chess-specific task for the Strange MCA system
-
-        
-        # Run the Strange MCA system
-        print(f"Running Strange MCA with {self.child_per_parent} children per parent, depth {self.depth}, model {self.model}")
-        result = run_strange_mca(
-            task=observation,
-            child_per_parent=self.child_per_parent,
-            depth=self.depth,
-            model=self.model,
-            viz=self.viz,
-            print_details=self.print_details,
-        )
-        
-        # Extract the move from the final response
-        final_response = result.get("final_response", "")
-        return final_response
-
 def main():
     """Run a Chess game between a Strange MCA multi-agent team and an OpenAI model."""
-    # Define the OpenAI agent with a chess-specific system prompt
-
-    
     # Define model names and create player name mapping
     openai_model = "gpt-3.5-turbo"
     strange_mca_config = {
