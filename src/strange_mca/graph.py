@@ -27,9 +27,8 @@ class State(TypedDict):
     nodes: Dict[str, Dict[str, str]]
     current_node: str
     final_response: str
-    strange_loop_prompt: str
-    strange_loop_response: str
-
+    strange_loops: List[Dict[str, str]]
+  
 def create_execution_graph(
     child_per_parent: int = 3,
     depth: int = 2,
@@ -150,12 +149,17 @@ def create_execution_graph(
             nodes[lg_node_name]["response"] = response
             if agent_tree.is_root(agent_name):
                 logger.debug(f"[{lg_node_name}] Processing root node synthesis (upward pass)")
-                strange_loop_prompt = create_strange_loop_prompt(state["original_task"], response)
-                strange_loop_response = agent.run(task=strange_loop_prompt)
-                state_updates["strange_loop_prompt"] = strange_loop_prompt
-                state_updates["strange_loop_response"] = strange_loop_response
-                final_response = parse_strange_loop_response(strange_loop_response)
-                state_updates["final_response"] = final_response
+                strange_loop_count = 3
+                if strange_loop_count > 0:
+                    strange_loops = []
+                    for i in range(strange_loop_count):
+                        strange_loop_prompt = create_strange_loop_prompt(state["original_task"], response)
+                        strange_loop_response = agent.run(task=strange_loop_prompt)
+                        strange_loops.append({"prompt": strange_loop_prompt, "response": strange_loop_response})
+                        response = parse_strange_loop_response(strange_loop_response)
+                    state_updates["strange_loops"] = strange_loops
+                state_updates["final_response"] = response
+               
         return state_updates
     
 
