@@ -34,6 +34,8 @@ def run_strange_mca(
     all_logs: bool = False,
     print_details: bool = True,
     output_dir: Optional[str] = None,
+    domain_specific_instructions: Optional[str] = "",
+    strange_loop_count: int = 0,
 ) -> Dict[str, Any]:
     """
     Run the Strange MCA system with the specified parameters.
@@ -48,7 +50,8 @@ def run_strange_mca(
         all_logs: Whether to show logs from dependencies in addition to local logs.
         print_details: Whether to print detailed information.
         output_dir: The output directory to use. If None, a directory will be created.
-        
+        domain_specific_instructions: Domain-specific instructions to include in the strange loop prompt.
+        strange_loop_count: Number of strange loop iterations to perform.   
     Returns:
         The result of the execution.
     """
@@ -94,7 +97,9 @@ def run_strange_mca(
         child_per_parent=child_per_parent,
         depth=depth,
         model_name=model,
-        langgraph_viz_dir=None  # We'll handle visualization separately
+        langgraph_viz_dir=None,  # We'll handle visualization separately
+        domain_specific_instructions=domain_specific_instructions,
+        strange_loop_count=strange_loop_count,
     )
     
     # Generate LangGraph visualization if requested

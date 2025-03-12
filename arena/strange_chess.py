@@ -16,7 +16,7 @@ def main():
     openai_model = "gpt-3.5-turbo"
     strange_mca_config = {
         "child_per_parent": 2,
-        "depth": 3,
+        "depth": 2,
         "model": "gpt-3.5-turbo"
     }
     
@@ -24,6 +24,8 @@ def main():
         0: f"Strange MCA Team ({strange_mca_config['model']})",
         1: f"OpenAI ({openai_model})"
     }
+
+    domain_specific_instructions = "I am playing in a game. I must win. My response must be an exact and valid move (no extra words!) that meets the game's rules."
     
     agents = {
         0: StrangeMCAAgent(
@@ -31,7 +33,9 @@ def main():
             depth=strange_mca_config["depth"],
             model=strange_mca_config["model"],
             viz=False,
-            print_details=True
+            print_details=True,
+            domain_specific_instructions=domain_specific_instructions,
+            strange_loop_count=3
         ),
         1: ta.agents.OpenAIAgent(
             model_name=openai_model, 

@@ -30,6 +30,8 @@ class StrangeMCAAgent(ta.Agent):
         viz: bool = False,
         print_details: bool = False,
         task_template: Optional[str] = None,
+        domain_specific_instructions: Optional[str] = "",
+        strange_loop_count: int = 0,
     ):
         """
         Initialize the Strange MCA agent.
@@ -47,7 +49,9 @@ class StrangeMCAAgent(ta.Agent):
         self.model = model
         self.viz = viz
         self.print_details = print_details
-        self.task_template = task_template
+        self.task_template = task_template  
+        self.domain_specific_instructions = domain_specific_instructions
+        self.strange_loop_count = strange_loop_count
         
     def __call__(self, observation: str) -> str:
         """
@@ -74,6 +78,8 @@ class StrangeMCAAgent(ta.Agent):
             model=self.model,
             viz=self.viz,
             print_details=self.print_details,
+            domain_specific_instructions=self.domain_specific_instructions,
+            strange_loop_count=self.strange_loop_count,
         )
         
         # Get the final response

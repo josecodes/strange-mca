@@ -34,6 +34,8 @@ def create_execution_graph(
     depth: int = 2,
     model_name: str = "gpt-3.5-turbo",
     langgraph_viz_dir: Optional[str] = None,
+    domain_specific_instructions: Optional[str] = "",
+    strange_loop_count: int = 0,
 ):
     """Create a LangGraph for bidirectional traversal of the multiagent system.
     
@@ -47,6 +49,8 @@ def create_execution_graph(
         model_name: The name of the LLM model to use.
         langgraph_viz_dir: If provided, generate a visualization of the LangGraph structure
                           in this directory. If None, no visualization is generated.
+        domain_specific_instructions: Domain-specific instructions to include in the strange loop prompt.
+        strange_loop_count: Number of strange loop iterations to perform.
         
     Returns:
         The compiled graph.
@@ -148,15 +152,14 @@ def create_execution_graph(
             response = agent.run(task=synthesis_prompt)
             nodes[lg_node_name]["response"] = response
             if agent_tree.is_root(agent_name):
-                logger.debug(f"[{lg_node_name}] Processing root node synthesis (upward pass)")
-                domain_specific_instructions = "I am playing in a game. I must win. My response must be an exact and valid move (no extra prose!) that meets the game's rules."
-                strange_loop_count = 3
+                logger.debug(f"[{lg_node_name}] Processing root node synthesis (upward pass)")                
+                local_strange_loop_count = strange_loop_count
                 if domain_specific_instructions is not None and domain_specific_instructions != "":
-                    strange_loop_count += 1
-                if strange_loop_count > 0:
+                    local_strange_loop_count += 1
+                if local_strange_loop_count > 0:
                     strange_loops = []
-                    for i in range(strange_loop_count):                        
-                        if i == strange_loop_count - 1 and domain_specific_instructions:
+                    for i in range(local_strange_loop_count):
+                        if i == local_strange_loop_count - 1:
                             strange_loop_prompt = create_strange_loop_prompt(state["original_task"], response, domain_specific_instructions)
                         else:
                             strange_loop_prompt = create_strange_loop_prompt(state["original_task"], response)

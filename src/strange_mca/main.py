@@ -72,6 +72,10 @@ def main():
                         help="Print the agent tree structure")
     parser.add_argument("--print_details", action="store_true",
                         help="Print details about each agent")
+    parser.add_argument("--domain_specific_instructions", type=str, default="",
+                        help="Domain-specific instructions to include in the strange loop prompt")
+    parser.add_argument("--strange_loop_count", type=int, default=0,
+                        help="Number of strange loop iterations to perform")
     
     args = parser.parse_args()
     
@@ -135,7 +139,9 @@ def main():
         child_per_parent=args.child_per_parent,
         depth=args.depth,
         model_name=args.model,
-        langgraph_viz_dir=None  # We'll handle visualization separately
+        langgraph_viz_dir=None,  # We'll handle visualization separately
+        domain_specific_instructions=args.domain_specific_instructions,
+        strange_loop_count=args.strange_loop_count,
     )
     
     # Generate LangGraph visualization if requested
@@ -167,19 +173,26 @@ def main():
         state_copy = copy.deepcopy(result)
         
         # Format nodes dictionary for better readability
-        if "nodes" in state_copy:
-            for node_name, node_data in state_copy["nodes"].items():
-                # Truncate long responses for display
-                if "response" in node_data and len(node_data["response"]) > 500:
-                    state_copy["nodes"][node_name]["response"] = node_data["response"][:500] + "... [truncated]"
+        # if "nodes" in state_copy:
+        #     for node_name, node_data in state_copy["nodes"].items():
+        #         # Truncate long responses for display
+        #         if "response" in node_data and len(node_data["response"]) > 500:
+        #             state_copy["nodes"][node_name]["response"] = node_data["response"][:500] + "... [truncated]"
                 
-                # Truncate long tasks for display
-                if "task" in node_data and len(node_data["task"]) > 500:
-                    state_copy["nodes"][node_name]["task"] = node_data["task"][:500] + "... [truncated]"
+        #         # Truncate long tasks for display
+        #         if "task" in node_data and len(node_data["task"]) > 500:
+        #             state_copy["nodes"][node_name]["task"] = node_data["task"][:500] + "... [truncated]"
+        #         if "strange_loops" in node_data:
+        #             state_copy["nodes"][node_name]["strange_loops"] = [
+        #                 {
+        #                     "prompt": loop["prompt"],
+        #                     "response": loop["response"][:500] + "... [truncated]"
+        #                 }   
+                     
         
-        # Pretty print the state
-        pp = pprint.PrettyPrinter(indent=2, width=100)
-        pp.pprint(state_copy)
+        # # Pretty print the state
+        # pp = pprint.PrettyPrinter(indent=2, width=100)
+        # pp.pprint(state_copy)
         print("=" * 80)
     
     # Save the full state to a JSON file
