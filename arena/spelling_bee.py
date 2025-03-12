@@ -36,57 +36,21 @@ def main():
 
     # Reset the environment
     env.reset(num_players=len(agents))
-    
-    # Game log to track all actions and events
-    game_log = []
-    
-    # Game loop
     done = False
     while not done:
-        # Get the current player ID and observation
+        print("=" * 50)
         player_id, observation = env.get_observation()
-        
-        # Display game state information
-        print("\n" + "="*80)
-        print(f"GAME STATE:")
-        print(f"Current Player: {player_id} ({'GPT-4o-mini' if player_id == 0 else 'GPT-3.5-turbo'})")
-        
-        # Extract and display allowed letters from the environment state
-        if hasattr(env.state, 'allowed_letters'):
-            print(f"Allowed Letters: {', '.join(sorted(env.state.allowed_letters))}")
-        
-        # Display words played so far
-        if hasattr(env.state, 'words_played'):
-            print("\nWords Played:")
-            for i, word in enumerate(env.state.words_played):
-                print(f"  {i+1}. {word}")
-        
-        # Display game log
-        print("\nGame Log:")
-        for entry in game_log:
-            print(f"  {entry}")
-        
-        print("\n" + "="*80)
         print(f"Player {player_id} observation:")
         print(observation)
-        
+        print("x" * 50)
         # Get the action from the agent
         action = agents[player_id](observation)
         print(f"Player {player_id} action: {action}")
-        
-        # Add to game log
-        game_log.append(f"Player {player_id}: {action}")
-        
-        # Call step and handle the return values
+        print("*" * 50)
         done, info = env.step(action=action)
-        
-        # Add any game messages to the log
-        if hasattr(env.state, 'messages'):
-            for message in env.state.messages:
-                if message.startswith('[GAME]'):
-                    game_log.append(message)
-    
-    # Close the environment and get rewards
+        if info:
+            print("Info:", info)
+        print("-" * 50)
     rewards = env.close()
     
     # Print the results
@@ -99,10 +63,6 @@ def main():
     else:
         print("No rewards available.")
     
-    # Print final game log
-    print("\nFinal Game Log:")
-    for entry in game_log:
-        print(f"  {entry}")
 
 if __name__ == "__main__":
     main() 
