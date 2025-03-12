@@ -10,6 +10,7 @@ import os
 import json
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
+import copy
 
 from src.strange_mca.main import create_output_dir
 from src.strange_mca.agents import create_agent_configs
@@ -120,9 +121,8 @@ def run_strange_mca(
     if print_details:
         print("\nFull State:")
         print("=" * 80)
-        # Create a copy of the result to avoid modifying the original
-        import pprint
-        state_copy = dict(result)
+        # Create a DEEP copy of the result to avoid modifying the original
+        state_copy = copy.deepcopy(result)
         
         # Format nodes dictionary for better readability
         if "nodes" in state_copy:
@@ -136,6 +136,7 @@ def run_strange_mca(
                     state_copy["nodes"][node_name]["task"] = node_data["task"][:500] + "... [truncated]"
         
         # Pretty print the state
+        import pprint
         pp = pprint.PrettyPrinter(indent=2, width=100)
         pp.pprint(state_copy)
         print("=" * 80)

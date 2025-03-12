@@ -12,6 +12,7 @@ import logging
 import os
 import pprint
 import datetime
+import copy
 from typing import Dict, Optional
 from dotenv import load_dotenv
 
@@ -162,8 +163,8 @@ def main():
     if args.print_details:
         print("\nFull State:")
         print("=" * 80)
-        # Create a copy of the result to avoid modifying the original
-        state_copy = dict(result)
+        # Create a DEEP copy of the result to avoid modifying the original
+        state_copy = copy.deepcopy(result)
         
         # Format nodes dictionary for better readability
         if "nodes" in state_copy:

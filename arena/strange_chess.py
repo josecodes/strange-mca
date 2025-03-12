@@ -16,7 +16,7 @@ class StrangeMCAAgent(ta.Agent):
     
     def __init__(
         self,
-        child_per_parent: int = 2,
+        child_per_parent: int = 3,
         depth: int = 2,
         model: str = "gpt-3.5-turbo",
         viz: bool = False,
@@ -49,21 +49,12 @@ class StrangeMCAAgent(ta.Agent):
             The action to take.
         """
         # Create a chess-specific task for the Strange MCA system
-        chess_task = f"""
-        You are playing a game of chess. Analyze the board carefully and make a strategic move.
-        
-        Current game state:
-        {observation}
-        
-        Your task is to decide on the best chess move to make in this position.
-        Provide your move in standard algebraic notation (e.g., 'e2e4', 'Nf3', etc.) or in UCI format.
-        Your final answer should be just the move notation, without any additional text.
-        """
+
         
         # Run the Strange MCA system
         print(f"Running Strange MCA with {self.child_per_parent} children per parent, depth {self.depth}, model {self.model}")
         result = run_strange_mca(
-            task=chess_task,
+            task=observation,
             child_per_parent=self.child_per_parent,
             depth=self.depth,
             model=self.model,
@@ -80,7 +71,7 @@ def main():
 
     
     # Define model names and create player name mapping
-    openai_model = "gpt-4o-mini"
+    openai_model = "gpt-3.5-turbo"
     strange_mca_config = {
         "child_per_parent": 2,
         "depth": 2,
@@ -130,6 +121,7 @@ def main():
         if info:
             print("Info:", info)
         print("-" * 50)
+        
 
     rewards = env.close()
     print("Rewards:")
@@ -137,6 +129,7 @@ def main():
         print(rewards)
     else:
         print("No results available.")
+
 
 if __name__ == "__main__":
     main() 

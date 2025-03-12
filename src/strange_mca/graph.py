@@ -240,7 +240,7 @@ def run_execution_graph(
             }
         },
     }
-    
+    logger.info(f"Initial state: {initial_state}")
     logger.info("Running bidirectional graph...")
     
     try:
