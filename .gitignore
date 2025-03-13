@@ -73,4 +73,9 @@ viz_outputs/
 output/
 output*/
 
-# ... existing code ... 
+ 
+# macOS specific files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
