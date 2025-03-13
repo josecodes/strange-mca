@@ -5,7 +5,7 @@
   </div>
 </div>
 
-This multiagent system is a (very) simplified model of a Multiscale Competency Architecture (MCA). Since reading about MCA in one of Michael Levin's recent papers  as a framework to conceptualize how biology organizes itself across multiple scales to solve problems and achieve goals - from cells to tissues to organs to organisms to social groups, I see MCAs everywhere :). I've been looking for a way to model it and using LLMs as information processing nodes in the heirarchy seemed like a fun experiment. 
+This multiagent system is a (very) simplified model of a Multiscale Competency Architecture (MCA). Since reading about MCA in [one](https://pubmed.ncbi.nlm.nih.gov/37156924/) of Michael Levin's recent papers posed as a framework to conceptualize how biology organizes itself across multiple scales to solve problems and achieve goals - from cells to tissues to organs to organisms to social groups, I see MCAs everywhere :). I've been looking for a way to model it and using LLMs as information processing nodes in the MCA seemed like a fun experiment. 
 
 This system is also inspired by Hofstadter's Strange Loop concept. There is a bit of (configurable) self-reflection when giving a response to a prompt at the root node in this system. Perhaps this is similar to what today's reasoning models do (albeit in a much more sophisticated form)
 
@@ -13,7 +13,7 @@ For both MCA and Strange Loop concepts, this system is a minimal (but fun) initi
 
 I thought it would make for interesting behavior and comparisons to point this at an OpenAI GYM style environment like TextArena to see it play chess and other games against other LLMs. So I have included TextArena integration code in the `examples` section.
 
-Probably the most fun thing to do with right now is to have it play a game of chess against a single LLM of the same spec. It is interesting to see agents decompose a problems to lower levels, synthesize them upwards, and then see the strange loop do its thing on the final response. In the `assets` directory there is a `final_state.json` that shows the first turn `state` object for the strange-mca set at 2 child-per-node, 3 levels, and gpt-4o-mini. All the messy chatter in its full glory to look through if it sounds interesting.
+Probably the most fun thing to do with right now is to have it play a game of chess against a single LLM of the same spec. It is interesting to see agents decompose problems to lower levels, synthesize them upwards, and then see the strange loop do its thing on the final response. In the `assets` directory there is a `final_state.json` that shows the first turn `state` object for the strange-mca set at 2 child-per-node, 3 levels, and gpt-4o-mini. All the messy chatter in its full glory to look through if it sounds interesting.
 
 ## High Level Architecture
 
