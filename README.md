@@ -2,7 +2,7 @@
 
 <img src="assets/strange-mca-logo.png" alt="Strange MCA Logo" width="150" align="left" style="margin-right: 20px; margin-bottom: 10px;">
 
-This multiagent system is a (very) simplified model of a Multiscale Competency Architecture (MCA). Since reading about MCA in [one](https://pubmed.ncbi.nlm.nih.gov/37156924/) of Michael Levin's recent papers posed as a framework to conceptualize how biology organizes itself across multiple scales to solve problems and achieve goals - from cells to tissues to organs to organisms to social groups, I see MCAs everywhere :). I've been looking for a way to model it and using LLMs as information processing nodes in the MCA seemed like a fun experiment. 
+This multiagent system is a (very) simplified model of a Multiscale Competency Architecture (MCA). Since reading about MCA in [one](https://pubmed.ncbi.nlm.nih.gov/37156924/) of Michael Levin's recent papers, , I see MCAs everywhere :).  Levin poses them as a framework to conceptualize how biology organizes itself across multiple scales to solve problems and achieve goals - from cells to tissues to organs to organisms to social groups. I've been looking for a way to model it and using LLMs as information processing nodes in the MCA seemed like a fun experiment. 
 
 This system is also inspired by Hofstadter's Strange Loop concept. There is a bit of (configurable) self-reflection when giving a response to a prompt at the root node in this system. Perhaps this is similar to what today's reasoning models do (albeit in a much more sophisticated form)
 
@@ -154,7 +154,7 @@ agents = {
 }
 
 # Initialize environment
-env = ta.make(env_id="YourGame-v0")
+env = ta.make(env_id="Chess-v0")
 env = ta.wrappers.LLMObservationWrapper(env=env)
 
 # Game loop
