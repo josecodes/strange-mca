@@ -1,6 +1,32 @@
-# strange-mca a Multiscale Competency Architecture (MCA) multiagent system, with a strange loop
+<div style="display: flex; align-items: center; margin-bottom: 20px;">
+  <img src="assets/strange-mca-logo.png" alt="Strange MCA Logo" width="150" style="margin-right: 20px;">
+  <div>
+    <h1 style="margin: 0; font-size: 28px; font-weight: bold;">strange-mca: MCA multiagent system, with a strange loop</h1>
+  </div>
+</div>
 
-Strange MCA is a hierarchical multi-agent system that uses a team of language models to solve complex tasks through task decomposition and response synthesis. The system creates a tree of agents that work together to break down problems, solve sub-problems, and synthesize a final response.
+This multiagent system is a simplified attempt to model a Multiscale Competency Architecture (MCA) to solve problems, puzzles in this case. Since reading about MCA in one of Michael Levin's recent papers  as a framework to conceptualize how biology organizes itself across multiple scales to solve problems and achieve goals - from cells to tissues to organs to organisms to social groups, I see MCAs everywhere :). I've been looking for a way to model it and using LLMs as information processing nodes in the heirarchy seemed like a fun experiment. 
+
+This system is also inspired by Hofstadter's Strange Loop concept. There is a bit of (configurable) self-reflection when giving a response to a prompt.  Perhaps similar to what today's reasoning models do (albeit in a much more sophisticated form)
+
+For both MCA and Strange Loop concepts, this system is a minimal (but fun) initial attempt at running a multiagent system that models these concepts. In the Future Improvements section near the end, I share some thoughts for iteration on the system.
+
+I thought it would make for interesting behavior and comparisons to point this at an OpenAI GYM style environment like TextArena to see it play chess and other games against other LLMs. So I have included TextArena integration code in the `examples` section.
+
+## High Level Architecture
+
+The `AgentTree` class in agents.py represents the conceptual MCA structure of the system. This uses a networkx directed graph as the core data structure.
+
+Separately, the `exectution_graph` in graph.py represents the execution graph for processing to propogate through the system. This uses LangGraph. 
+
+Below are an image of the AgentTree on the left and the LangGraph execution graph on the right.
+
+<div style="display: flex; justify-content: space-between;">
+  <img src="assets/agent_tree_nx.png" alt="Agent Tree" width="45%">
+  <img src="assets/execution_graph_lg.png" alt="Execution Graph" width="45%">
+</div>
+
+Tasks are decomposed down the AgentTree and responses are synthesized upwards. The execution graph on the right represents the flattened bfs downward and upward traversal of the tree on the left. The graphs were kept separate to allow for full control of execution traversal and to simplify debugging. If scale, concurrency, and/or dynamic routing are desired in the future, it will make sense to move over to LangGraph entirely.
 
 ## Features
 
