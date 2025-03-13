@@ -190,7 +190,7 @@ while not done:
 
 ## Future Improvements
 
-This system mainly serves as a playground to model MCA and StrangeLoop in a functional way. This will be the focus. It may even solve puzzles better than its non-MCA competitors one day.
+This system mainly serves as a playground to model MCA and StrangeLoop in a functional way. This will be the focus, not so much things like scale and performance. It may even solve puzzles better than its non-MCA competitors one day.
 
 ### MCA Ideas/Improvements
 * This version is very top down and perhaps antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it.
