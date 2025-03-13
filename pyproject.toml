@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "strange-mca"
 version = "0.1.0"
-description = "A Python project managed with Poetry"
+description = "a strange multiscale competency architecutre multi-agent system"
 authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
 packages = [{include = "strange_mca", from = "src"}]
@@ -26,6 +26,26 @@ pytest = "^7.3.1"
 black = "^23.3.0"
 isort = "^5.12.0"
 flake8 = "^6.0.0"
+ruff = "^0.3.0"
+
+[tool.ruff]
+# Enable pycodestyle ('E'), Pyflakes ('F'), isort ('I'), and more
+select = ["E", "F", "I", "W", "N", "B", "C4", "UP", "S", "BLE", "A", "C", "T", "PT", "RET", "SIM"]
+# Ignore specific rules:
+# T201: Don't use print (we're using print for debugging/output in this project)
+# C901: Function is too complex (would require significant refactoring)
+# E501: Line too long (Black handles most of these, but some are in strings/comments)
+# BLE001: Blind exception catching (would require careful refactoring)
+# A002: Argument shadows builtin (would require API changes)
+# F841: Local variable assigned but never used
+# SIM108: Use ternary operator instead of if-else block
+# RET504/RET505: Unnecessary assignment/else before return
+ignore = ["T201", "C901", "E501", "BLE001", "A002", "F841", "SIM108", "RET504", "RET505"]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.isort]
+known-first-party = ["strange_mca"]
 
 [build-system]
 requires = ["poetry-core"]
