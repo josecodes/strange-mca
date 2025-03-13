@@ -10,7 +10,7 @@ For both MCA and Strange Loop concepts, this system is a minimal (but fun) initi
 
 I thought it would make for interesting behavior and comparisons to point this at an OpenAI GYM style environment like TextArena to see it play chess and other games against other LLMs. So I have included TextArena integration code in the `examples` section.
 
-Probably the most fun thing to do with right now is to have it play a game of chess against a single LLM of the same spec. It is interesting to see agents decompose problems to lower levels, synthesize them upwards, and then see the strange loop do its thing on the final response. In the `assets` directory there is a `final_state.json` that shows the first turn `state` object for the strange-mca set at 2 child-per-node, 3 levels, and gpt-4o-mini. All the messy chatter in its full glory to look through if it sounds interesting.
+Probably the most fun thing to do with it right now is to have it play a game of chess against a single LLM of the same spec. It is interesting to see agents decompose problems to lower levels, synthesize them upwards, and then see the strange loop do its thing on the final response. In the `assets` directory there is a `final_state.json` that shows the first turn `state` object for the strange-mca set at 2 child-per-node, 3 levels, and gpt-4o-mini. All the messy chatter in its full glory to look through if it sounds interesting.
 
 ## High Level Architecture
 
