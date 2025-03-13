@@ -1,4 +1,4 @@
-# **strange-mca**: MCA multiagent system, with a strange loop
+# **strange-mca**: MCA system with a strange loop
 
 <img src="assets/strange-mca-logo.png" alt="Strange MCA Logo" width="150" align="left" style="margin-right: 20px; margin-bottom: 10px;">
 
