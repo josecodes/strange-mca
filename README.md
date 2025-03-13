@@ -4,7 +4,7 @@
 
 This multiagent system is a simplified model of a Multiscale Competency Architecture (MCA). Since reading about MCA in [one](https://pubmed.ncbi.nlm.nih.gov/37156924/) of Michael Levin's recent papers, I see MCAs everywhere :).  Levin poses them as a framework to conceptualize how biology organizes itself across multiple scales to solve problems and achieve goals - from cells to tissues to organs to organisms to social groups. I've been looking for a way to model it and using LLMs as information processing nodes in the MCA seemed like a fun experiment. 
 
-This system is also inspired by Hofstadter's [Strange Loop](https://en.wikipedia.org/wiki/Strange_loop). There is a bit of (configurable) self-reflection when giving a response to a prompt at the root node in this system. Perhaps this is similar to what today's reasoning models do (albeit in a much more sophisticated form)
+This system is also inspired by Hofstadter's [Strange Loop](https://en.wikipedia.org/wiki/Strange_loop). There is a bit of (configurable) self-reflection when giving a response to a prompt at the root node in this system. Perhaps this is similar to what today's reasoning models do (albeit in more sophisticated form)
 
 For both MCA and Strange Loop concepts, this system is a minimal (but fun) initial attempt at running a multiagent system that models these concepts. In the Future Improvements section near the end, I share some thoughts for iteration on the system.
 
