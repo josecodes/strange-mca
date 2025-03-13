@@ -1,9 +1,6 @@
-<div style="display: flex; align-items: center; margin-bottom: 20px;">
-  <img src="assets/strange-mca-logo.png" alt="Strange MCA Logo" width="150" style="margin-right: 20px;">
-  <div>
-    <h1 style="margin: 0; font-size: 28px; font-weight: bold;">strange-mca: MCA multiagent system, with a strange loop</h1>
-  </div>
-</div>
+# **strange-mca** - a Multiscale Competency Architecture (MCA) multiagent system, with a strange loop
+
+<img src="assets/strange-mca-logo.png" alt="Strange MCA Logo" width="150" align="left" style="margin-right: 20px; margin-bottom: 10px;">
 
 This multiagent system is a (very) simplified model of a Multiscale Competency Architecture (MCA). Since reading about MCA in [one](https://pubmed.ncbi.nlm.nih.gov/37156924/) of Michael Levin's recent papers posed as a framework to conceptualize how biology organizes itself across multiple scales to solve problems and achieve goals - from cells to tissues to organs to organisms to social groups, I see MCAs everywhere :). I've been looking for a way to model it and using LLMs as information processing nodes in the MCA seemed like a fun experiment. 
 
