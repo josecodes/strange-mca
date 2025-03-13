@@ -2,9 +2,9 @@
 
 <img src="assets/strange-mca-logo.png" alt="Strange MCA Logo" width="150" align="left" style="margin-right: 20px; margin-bottom: 10px;">
 
-This multiagent system is a (very) simplified model of a Multiscale Competency Architecture (MCA). Since reading about MCA in [one](https://pubmed.ncbi.nlm.nih.gov/37156924/) of Michael Levin's recent papers, , I see MCAs everywhere :).  Levin poses them as a framework to conceptualize how biology organizes itself across multiple scales to solve problems and achieve goals - from cells to tissues to organs to organisms to social groups. I've been looking for a way to model it and using LLMs as information processing nodes in the MCA seemed like a fun experiment. 
+This multiagent system is a simplified model of a Multiscale Competency Architecture (MCA). Since reading about MCA in [one](https://pubmed.ncbi.nlm.nih.gov/37156924/) of Michael Levin's recent papers, I see MCAs everywhere :).  Levin poses them as a framework to conceptualize how biology organizes itself across multiple scales to solve problems and achieve goals - from cells to tissues to organs to organisms to social groups. I've been looking for a way to model it and using LLMs as information processing nodes in the MCA seemed like a fun experiment. 
 
-This system is also inspired by Hofstadter's Strange Loop concept. There is a bit of (configurable) self-reflection when giving a response to a prompt at the root node in this system. Perhaps this is similar to what today's reasoning models do (albeit in a much more sophisticated form)
+This system is also inspired by Hofstadter's [Strange Loop](https://en.wikipedia.org/wiki/Strange_loop). There is a bit of (configurable) self-reflection when giving a response to a prompt at the root node in this system. Perhaps this is similar to what today's reasoning models do (albeit in a much more sophisticated form)
 
 For both MCA and Strange Loop concepts, this system is a minimal (but fun) initial attempt at running a multiagent system that models these concepts. In the Future Improvements section near the end, I share some thoughts for iteration on the system.
 
@@ -108,6 +108,11 @@ print(result["final_response"])
 ```
 
 ### TextArena Integration
+
+
+![Curses Chess Interface](assets/curses-chess.png)
+
+
 
 Strange MCA can be used with [TextArena](https://github.com/microsoft/TextWorld) to create agents that play games and solve interactive tasks. The integration is available in the `examples/arena` directory.
 
