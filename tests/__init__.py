@@ -1,1 +1,1 @@
-"""Test package for Strange MCA.""" 
+"""Test package for Strange MCA."""

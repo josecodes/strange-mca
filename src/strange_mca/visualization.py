@@ -74,7 +74,7 @@ def visualize_agent_graph(
         dot.node(name, label, style="filled", fillcolor=color)
 
     # Add edges using the AgentTree
-    for name in agent_configs.keys():
+    for name in agent_configs:
         parent = agent_tree.get_parent(name)
         if parent:
             dot.edge(parent, name)
@@ -228,13 +228,11 @@ def visualize_langgraph(
         # Add a title to the graph
         try:
             depth = len(
-                set(
-                    [
-                        n.split("_")[0][1:2]
-                        for n in lg_graph.nodes
-                        if n not in ["__start__", "__end__"]
-                    ]
-                )
+                {
+                    n.split("_")[0][1:2]
+                    for n in lg_graph.nodes
+                    if n not in ["__start__", "__end__"]
+                }
             )
             dot.attr(
                 label=f"Execution Graph\nDepth: {depth}\nNodes: {len(lg_graph.nodes)}",

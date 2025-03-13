@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Run linting checks
+./scripts/lint.sh --check
+
+# If the linting checks fail, abort the commit
+if [ $? -ne 0 ]; then
+  echo "Linting checks failed. Please fix the issues before committing."
+  exit 1
+fi 

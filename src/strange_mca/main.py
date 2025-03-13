@@ -12,7 +12,6 @@ import datetime
 import json
 import logging
 import os
-import pprint as pp
 
 from dotenv import load_dotenv
 
@@ -227,7 +226,7 @@ def main():
 
         # # Pretty print the state
         # pp = pprint.PrettyPrinter(indent=2, width=100)
-        pp.pprint(state_copy)
+        print(json.dumps(state_copy, indent=2))
         print("=" * 80)
 
     # Save the full state to a JSON file

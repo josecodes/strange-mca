@@ -1,9 +1,8 @@
 """Tests for the TextArena integration."""
 
-import pytest
-from unittest.mock import patch, MagicMock
-import sys
 import os
+import sys
+from unittest.mock import patch
 
 # Add the arena directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "arena"))
@@ -16,7 +15,7 @@ def test_strangemca_agent_init(mock_run_strange_mca):
     """Test the initialization of the StrangeMCAAgent class."""
     # Create an agent with default parameters
     agent = StrangeMCAAgent()
-    
+
     # Check that the default parameters are set correctly
     assert agent.child_per_parent == 3
     assert agent.depth == 2
@@ -26,7 +25,7 @@ def test_strangemca_agent_init(mock_run_strange_mca):
     assert agent.task_template is None
     assert agent.domain_specific_instructions == ""
     assert agent.strange_loop_count == 0
-    
+
     # Create an agent with custom parameters
     agent = StrangeMCAAgent(
         child_per_parent=2,
@@ -36,9 +35,9 @@ def test_strangemca_agent_init(mock_run_strange_mca):
         print_details=True,
         task_template="Task: {observation}",
         domain_specific_instructions="Be concise.",
-        strange_loop_count=2
+        strange_loop_count=2,
     )
-    
+
     # Check that the custom parameters are set correctly
     assert agent.child_per_parent == 2
     assert agent.depth == 3
@@ -55,13 +54,13 @@ def test_strangemca_agent_call(mock_run_strange_mca):
     """Test the __call__ method of the StrangeMCAAgent class."""
     # Mock the run_strange_mca function
     mock_run_strange_mca.return_value = {"final_response": "Test response"}
-    
+
     # Create an agent
     agent = StrangeMCAAgent()
-    
+
     # Call the agent with an observation
     response = agent("What is the capital of France?")
-    
+
     # Check that run_strange_mca was called with the correct parameters
     mock_run_strange_mca.assert_called_once_with(
         task="What is the capital of France?",
@@ -71,9 +70,9 @@ def test_strangemca_agent_call(mock_run_strange_mca):
         viz=False,
         print_details=False,
         domain_specific_instructions="",
-        strange_loop_count=0
+        strange_loop_count=0,
     )
-    
+
     # Check that the response is correct
     assert response == "Test response"
 
@@ -83,15 +82,15 @@ def test_strangemca_agent_with_template(mock_run_strange_mca):
     """Test the StrangeMCAAgent with a task template."""
     # Mock the run_strange_mca function
     mock_run_strange_mca.return_value = {"final_response": "Paris"}
-    
+
     # Create an agent with a task template
     agent = StrangeMCAAgent(
         task_template="Answer the following question: {observation}"
     )
-    
+
     # Call the agent with an observation
     response = agent("What is the capital of France?")
-    
+
     # Check that run_strange_mca was called with the correct parameters
     mock_run_strange_mca.assert_called_once_with(
         task="Answer the following question: What is the capital of France?",
@@ -101,8 +100,8 @@ def test_strangemca_agent_with_template(mock_run_strange_mca):
         viz=False,
         print_details=False,
         domain_specific_instructions="",
-        strange_loop_count=0
+        strange_loop_count=0,
     )
-    
+
     # Check that the response is correct
-    assert response == "Paris" 
+    assert response == "Paris"

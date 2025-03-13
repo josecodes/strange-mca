@@ -247,7 +247,7 @@ class AgentTree:
         dot = graphviz.Digraph(comment="Agent Tree")
 
         # Add nodes
-        for node_name, config in self.get_configs().items():
+        for node_name in self.get_configs():
             # Determine node shape and color based on type
             if self.is_root(node_name):
                 node_shape = "doubleoctagon"

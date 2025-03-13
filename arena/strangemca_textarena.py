@@ -5,10 +5,8 @@ This module provides agent classes and utilities for using Strange MCA with Text
 """
 
 import os
-import re
 import sys
-import textwrap
-from typing import Dict, Any, Optional
+from typing import Optional
 
 import textarena as ta
 
@@ -16,12 +14,13 @@ import textarena as ta
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from strange_mca.run_strange_mca import run_strange_mca
 
+
 class StrangeMCAAgent(ta.Agent):
     """
     Custom agent wrapper for the Strange MCA multi-agent system.
     This agent uses a team of LLMs to analyze and solve tasks.
     """
-    
+
     def __init__(
         self,
         child_per_parent: int = 3,
@@ -35,7 +34,7 @@ class StrangeMCAAgent(ta.Agent):
     ):
         """
         Initialize the Strange MCA agent.
-        
+
         Args:
             child_per_parent: Number of children per parent node in the agent tree.
             depth: Depth of the agent tree.
@@ -49,17 +48,17 @@ class StrangeMCAAgent(ta.Agent):
         self.model = model
         self.viz = viz
         self.print_details = print_details
-        self.task_template = task_template  
+        self.task_template = task_template
         self.domain_specific_instructions = domain_specific_instructions
         self.strange_loop_count = strange_loop_count
-        
+
     def __call__(self, observation: str) -> str:
         """
         Process the observation and return an action using the Strange MCA system.
-        
+
         Args:
             observation: The observation from the environment.
-            
+
         Returns:
             The action to take.
         """
@@ -80,4 +79,3 @@ class StrangeMCAAgent(ta.Agent):
         )
         final_response = result.get("final_response", "")
         return final_response
-

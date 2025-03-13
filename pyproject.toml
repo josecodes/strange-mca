@@ -40,12 +40,22 @@ select = ["E", "F", "I", "W", "N", "B", "C4", "UP", "S", "BLE", "A", "C", "T", "
 # F841: Local variable assigned but never used
 # SIM108: Use ternary operator instead of if-else block
 # RET504/RET505: Unnecessary assignment/else before return
-ignore = ["T201", "C901", "E501", "BLE001", "A002", "F841", "SIM108", "RET504", "RET505"]
+# S101: Use of assert (we're using assert in tests, which is a common pattern in pytest)
+ignore = ["T201", "C901", "E501", "BLE001", "A002", "F841", "SIM108", "RET504", "RET505", "S101"]
 line-length = 100
 target-version = "py39"
 
 [tool.ruff.isort]
 known-first-party = ["strange_mca"]
+
+# Per-file ignores
+[tool.ruff.per-file-ignores]
+# Ignore unused imports in __init__.py files
+"__init__.py" = ["F401"]
+# Ignore assert usage in test files
+"tests/*" = ["S101", "E402"]
+# Ignore module level import not at top of file in arena files
+"arena/*" = ["E402"]
 
 [build-system]
 requires = ["poetry-core"]
