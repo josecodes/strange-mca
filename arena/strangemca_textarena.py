@@ -68,9 +68,6 @@ class StrangeMCAAgent(ta.Agent):
             task = self.task_template.format(observation=observation)
         else:
             task = observation
-        
-        # Run the Strange MCA system
-        print(f"Running Strange MCA with {self.child_per_parent} children per parent, depth {self.depth}, model {self.model}")
         result = run_strange_mca(
             task=task,
             child_per_parent=self.child_per_parent,
@@ -81,12 +78,6 @@ class StrangeMCAAgent(ta.Agent):
             domain_specific_instructions=self.domain_specific_instructions,
             strange_loop_count=self.strange_loop_count,
         )
-        
-        # Get the final response
         final_response = result.get("final_response", "")
-        
-        # Print the response for debugging
-        print(f"Response: {final_response}")
-        
         return final_response
 

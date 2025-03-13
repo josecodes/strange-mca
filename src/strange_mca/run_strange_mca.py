@@ -29,10 +29,10 @@ def run_strange_mca(
     child_per_parent: int = 2,
     depth: int = 2,
     model: str = "gpt-3.5-turbo",
-    log_level: str = "info",
-    viz: bool = True,
+    log_level: str = "warn",
+    viz: bool = False,
     all_logs: bool = False,
-    print_details: bool = True,
+    print_details: bool = False,
     output_dir: Optional[str] = None,
     domain_specific_instructions: Optional[str] = "",
     strange_loop_count: int = 0,
@@ -118,10 +118,10 @@ def run_strange_mca(
     
     # Print the final response
     logger.info("Graph execution completed")
-    print("\nFinal Response:")
-    print("=" * 80)
-    print(result.get("final_response", "No final response generated"))
-    print("=" * 80)
+    # print("\nFinal Response:")
+    # print("=" * 80)
+    # print(result.get("final_response", "No final response generated"))
+    # print("=" * 80)
     
     if print_details:
         print("\nFull State:")
@@ -150,14 +150,14 @@ def run_strange_mca(
     state_file = os.path.join(output_dir, "final_state.json")
     with open(state_file, "w") as f:
         json.dump(result, f, indent=2)
-    print(f"Full state saved to: {state_file}")
+    # print(f"Full state saved to: {state_file}")
     
-    # Print execution summary
-    print("\nExecution Summary:")
-    print(f"Tree structure: {child_per_parent} children per parent, {depth} levels deep")
-    print(f"Task: {task}")
-    print(f"Model: {model}")
-    print(f"Output saved to: {output_dir}")
+    # # Print execution summary
+    # print("\nExecution Summary:")
+    # print(f"Tree structure: {child_per_parent} children per parent, {depth} levels deep")
+    # print(f"Task: {task}")
+    # print(f"Model: {model}")
+    # print(f"Output saved to: {output_dir}")
     
     return result
 

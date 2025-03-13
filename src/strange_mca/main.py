@@ -15,6 +15,7 @@ import datetime
 import copy
 from typing import Dict, Optional
 from dotenv import load_dotenv
+import pprint as pp
 
 from src.strange_mca.graph import create_execution_graph, run_execution_graph
 from src.strange_mca.visualization import (
@@ -172,17 +173,7 @@ def main():
         # Create a DEEP copy of the result to avoid modifying the original
         state_copy = copy.deepcopy(result)
         
-        # Format nodes dictionary for better readability
-        # if "nodes" in state_copy:
-        #     for node_name, node_data in state_copy["nodes"].items():
-        #         # Truncate long responses for display
-        #         if "response" in node_data and len(node_data["response"]) > 500:
-        #             state_copy["nodes"][node_name]["response"] = node_data["response"][:500] + "... [truncated]"
-                
-        #         # Truncate long tasks for display
-        #         if "task" in node_data and len(node_data["task"]) > 500:
-        #             state_copy["nodes"][node_name]["task"] = node_data["task"][:500] + "... [truncated]"
-        #         if "strange_loops" in node_data:
+
         #             state_copy["nodes"][node_name]["strange_loops"] = [
         #                 {
         #                     "prompt": loop["prompt"],
@@ -192,7 +183,7 @@ def main():
         
         # # Pretty print the state
         # pp = pprint.PrettyPrinter(indent=2, width=100)
-        # pp.pprint(state_copy)
+        pp.pprint(state_copy)
         print("=" * 80)
     
     # Save the full state to a JSON file
