@@ -173,6 +173,20 @@ This project follows PEP 8 guidelines. You can check your code style with:
 poetry run flake8
 ```
 
+### Linting
+
+This project uses Ruff and Black for code linting and formatting. You can run the linting scripts with:
+
+```bash
+# Run both Ruff and Black on the default directories
+./scripts/lint.sh
+
+# Fix issues automatically
+./scripts/lint.sh --fix
+```
+
+See `scripts/README.md` for more details on the linting scripts.
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
