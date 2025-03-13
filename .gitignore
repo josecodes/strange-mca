@@ -67,7 +67,6 @@ poetry.lock
 
 # Visualization outputs
 viz_outputs/
-*.png
 *.dot
 
 # Output directory
