@@ -1,4 +1,4 @@
-# Strange MCA: Multi-Agent Conversation Architecture
+# strange-mca a Multiscale Competency Architecture (MCA) multiagent system, with a strange loop
 
 Strange MCA is a hierarchical multi-agent system that uses a team of language models to solve complex tasks through task decomposition and response synthesis. The system creates a tree of agents that work together to break down problems, solve sub-problems, and synthesize a final response.
 

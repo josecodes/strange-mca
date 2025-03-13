@@ -42,7 +42,7 @@ def main():
     }
 
     # Initialize environment and wrap it
-    env = ta.make(env_id="SpellingBee-v0")
+    env = ta.make(env_id="Chess-v0")
     env = ta.wrappers.LLMObservationWrapper(env=env)
 
     # Reset the environment
