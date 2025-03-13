@@ -16,24 +16,24 @@ This project uses a local installation of TextArena from `/Users/jcortez/dev/Tex
 
 ## Available Scripts
 
-### 1. `direct_spelling_bee.py`
+### 1. `strange_basic_twoplayer.py`
 
-This script demonstrates how to use TextArena to run a SpellingBee game between two OpenAI models (GPT-4o-mini and GPT-3.5-Turbo).
+This script demonstrates how to use TextArena to run a Chess game between a Strange MCA agent team and an OpenAI model.
 
 To run the script:
 
 ```bash
-poetry run python arena/direct_spelling_bee.py
+poetry run python examples/arena/strange_basic_twoplayer.py
 ```
 
-### 2. `direct_tictactoe.py`
+### 2. `strange_rendered_twoplayer.py`
 
-This script demonstrates how to use TextArena to run a TicTacToe game between two OpenAI models (GPT-4o-mini and GPT-3.5-Turbo).
+This script demonstrates how to use TextArena to run a Chess game between a Strange MCA agent team and an OpenAI model, with visual rendering.
 
 To run the script:
 
 ```bash
-poetry run python arena/direct_tictactoe.py
+poetry run python examples/arena/strange_rendered_twoplayer.py
 ```
 
 ## Game State Display
@@ -41,8 +41,7 @@ poetry run python arena/direct_tictactoe.py
 The example scripts have been enhanced to display detailed game state information without relying on render wrappers. This includes:
 
 - Current player information
-- Game-specific state (e.g., allowed letters in SpellingBee, board state in TicTacToe)
-- Game log tracking all actions and events
+- Game-specific state (e.g., board state in Chess)
 - Player observations and actions
 - Game results with player rewards
 
@@ -50,14 +49,16 @@ This approach provides a clean and informative display that works in any termina
 
 ## Render Wrapper Options
 
-While the default configuration uses no render wrapper for reliability, you can optionally enable more interactive and visually appealing interfaces by using one of the following render wrappers:
+While the `strange_basic_twoplayer.py` script uses no render wrapper for reliability, the `strange_rendered_twoplayer.py` script uses the CursesRenderWrapper for a more interactive and visually appealing interface.
+
+You can use one of the following render wrappers in your own scripts:
 
 1. **SimpleRenderWrapper**: A basic render wrapper that displays the game state in a formatted box. This can cause display issues in some terminals.
 
 ```python
 env = ta.wrappers.SimpleRenderWrapper(
     env=env,
-    player_names={0: "GPT-4o-mini", 1: "GPT-3.5-turbo"},
+    player_names={0: "Strange MCA Team", 1: "OpenAI"},
 )
 ```
 
@@ -66,11 +67,9 @@ env = ta.wrappers.SimpleRenderWrapper(
 ```python
 env = ta.wrappers.RenderWrappers.CursesRenderWrapper(
     env=env,
-    player_names={0: "GPT-4o-mini", 1: "GPT-3.5-turbo"},
+    player_names={0: "Strange MCA Team", 1: "OpenAI"},
 )
 ```
-
-You can uncomment the appropriate lines in the example scripts to use these render wrappers.
 
 ## Available Games
 
@@ -88,24 +87,34 @@ To create a custom script for a different game, follow this template:
 
 ```python
 import os
-from dotenv import load_dotenv
+import sys
 import textarena as ta
+from dotenv import load_dotenv
+
+# Add the project root to the Python path to allow importing from src
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from examples.arena.strangemca_textarena import StrangeMCAAgent
 
 # Load environment variables
 load_dotenv()
 
 # Initialize agents
 agents = {
-    0: ta.agents.OpenAIAgent(model_name="gpt-3.5-turbo"),
-    1: ta.agents.OpenAIAgent(model_name="gpt-4o-mini"),
+    0: StrangeMCAAgent(
+        child_per_parent=2,
+        depth=2,
+        model="gpt-4o-mini",
+        domain_specific_instructions="Your game-specific instructions here",
+    ),
+    1: ta.agents.OpenAIAgent(
+        model_name="gpt-4o-mini",
+        system_prompt="Your system prompt here",
+    ),
 }
 
 # Initialize environment and wrap it
 env = ta.make(env_id="GameName-v0")  # Replace with the desired game
 env = ta.wrappers.LLMObservationWrapper(env=env)
-
-# Game log to track all actions and events
-game_log = []
 
 # Reset the environment
 env.reset(num_players=len(agents))
@@ -116,54 +125,21 @@ while not done:
     # Get the current player ID and observation
     player_id, observation = env.get_observation()
     
-    # Display game state information
-    print("\n" + "="*80)
-    print(f"GAME STATE:")
-    print(f"Current Player: {player_id}")
-    
-    # Display game-specific state information here
-    # ...
-    
-    # Display game log
-    print("\nGame Log:")
-    for entry in game_log:
-        print(f"  {entry}")
-    
-    print("\n" + "="*80)
-    print(f"Player {player_id} observation:")
-    print(observation)
-    
+    # Get action from the agent
     action = agents[player_id](observation)
-    print(f"Player {player_id} action: {action}")
-    
-    # Add to game log
-    game_log.append(f"Player {player_id}: {action}")
     
     # Call step and handle the return values
     done, info = env.step(action=action)
-    
-    # Add any game messages to the log
-    if hasattr(env.state, 'messages'):
-        for message in env.state.messages:
-            if message.startswith('[GAME]'):
-                game_log.append(message)
 
 # Close the environment and get rewards
 rewards = env.close()
 
 # Print the results
-print("\n" + "="*80)
-print("GAME RESULTS:")
+print("Rewards:")
 if rewards:
-    for player_id, reward in rewards.items():
-        print(f"Player {player_id}: {reward}")
+    print(rewards)
 else:
-    print("No rewards available.")
-
-# Print final game log
-print("\nFinal Game Log:")
-for entry in game_log:
-    print(f"  {entry}")
+    print("No results available.")
 ```
 
-Replace `"GameName-v0"` with the ID of the game you want to play, and adjust the number of players and agent models as needed. 
+Replace `"GameName-v0"` with the ID of the game you want to play, and adjust the agent parameters as needed. 

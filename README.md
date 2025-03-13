@@ -82,12 +82,12 @@ print(result["final_response"])
 
 ### TextArena Integration
 
-Strange MCA can be used with [TextArena](https://github.com/microsoft/TextWorld) to create agents that play games and solve interactive tasks. The integration is available in the `arena` directory.
+Strange MCA can be used with [TextArena](https://github.com/microsoft/TextWorld) to create agents that play games and solve interactive tasks. The integration is available in the `examples/arena` directory.
 
 #### Running a TextArena Game
 
 ```bash
-poetry run python arena/strange_basic_twoplayer.py
+poetry run python examples/arena/strange_basic_twoplayer.py
 ```
 
 This will run a two-player game (SpellingBee by default) with a Strange MCA agent competing against an OpenAI agent.
@@ -149,10 +149,11 @@ while not done:
   - `prompts.py`: Prompt templates for various stages of processing
   - `visualization.py`: Tools for visualizing the agent tree and execution
   - `logging_utils.py`: Utilities for detailed logging
-- `arena/`: TextArena integration
-  - `strangemca_textarena.py`: Integration of Strange MCA with TextArena
-  - `strange_basic_twoplayer.py`: Basic two-player game script
-  - `strange_rendered_twoplayer.py`: Two-player game with rendering
+- `examples/`: Example use cases and integrations
+  - `arena/`: TextArena integration
+    - `strangemca_textarena.py`: Integration of Strange MCA with TextArena
+    - `strange_basic_twoplayer.py`: Basic two-player game script
+    - `strange_rendered_twoplayer.py`: Two-player game with rendering
 - `output/`: Generated outputs and visualizations
 
 ## Development

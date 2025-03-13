@@ -18,6 +18,7 @@ networkx = "^3.2.1"
 matplotlib = "^3.8.2"
 
 [tool.poetry.group.arena.dependencies]
+#using a local TextArena clone; the pypi version wasn't working when i tried 
 textarena = {path = "/Users/jcortez/dev/TextArena", develop = true}
 openai = "^1.0.0"
 
@@ -54,8 +55,8 @@ known-first-party = ["strange_mca"]
 "__init__.py" = ["F401"]
 # Ignore assert usage in test files
 "tests/*" = ["S101", "E402"]
-# Ignore module level import not at top of file in arena files
-"arena/*" = ["E402"]
+# Ignore module level import not at top of file in examples/arena files
+"examples/arena/*" = ["E402"]
 
 [build-system]
 requires = ["poetry-core"]

@@ -11,8 +11,10 @@ from typing import Optional
 import textarena as ta
 
 # Add the project root to the Python path to allow importing from src
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from strange_mca.run_strange_mca import run_strange_mca
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+from src.strange_mca.run_strange_mca import run_strange_mca
 
 
 class StrangeMCAAgent(ta.Agent):
@@ -23,7 +25,7 @@ class StrangeMCAAgent(ta.Agent):
 
     def __init__(
         self,
-        child_per_parent: int = 3,
+        child_per_parent: int = 2,
         depth: int = 2,
         model: str = "gpt-3.5-turbo",
         viz: bool = False,

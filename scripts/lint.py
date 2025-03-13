@@ -80,8 +80,8 @@ def main():
     parser.add_argument(
         "--target", 
         nargs="+", 
-        default=["src", "tests", "arena"], 
-        help="Directories to lint (default: src tests arena)"
+        default=["src", "tests", "examples"], 
+        help="Directories to lint (default: src tests examples)"
     )
     parser.add_argument(
         "--ruff-only", 

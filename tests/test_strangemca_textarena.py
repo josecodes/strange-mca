@@ -4,8 +4,10 @@ import os
 import sys
 from unittest.mock import patch
 
-# Add the arena directory to the Python path
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "arena"))
+# Add the examples/arena directory to the Python path
+sys.path.append(
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples/arena")
+)
 
 from strangemca_textarena import StrangeMCAAgent
 
@@ -79,7 +81,7 @@ def test_strangemca_agent_call(mock_run_strange_mca):
 
 @patch("strangemca_textarena.run_strange_mca")
 def test_strangemca_agent_with_template(mock_run_strange_mca):
-    """Test the StrangeMCAAgent with a task template."""
+    """Test the StrangeMCAAgent with a custom task template."""
     # Mock the run_strange_mca function
     mock_run_strange_mca.return_value = {"final_response": "Paris"}
 
