@@ -136,7 +136,7 @@ print(result["final_response"])
 
 
 
-strange-mca can be used with [TextArena](https://github.com/microsoft/TextWorld) to create agents that play games and solve interactive tasks. The integration is available in the `examples/arena` directory.
+strange-mca can be used with [TextArena](https://github.com/LeonGuertler/TextArena) to create agents that play games and solve interactive tasks. The integration is available in the `examples/arena` directory.
 
 #### Running a TextArena Game
 
@@ -253,4 +253,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgments
 
 - This project uses [LangGraph](https://github.com/langchain-ai/langgraph) for graph-based execution
-- TextArena integration is based on [TextArena](https://github.com/microsoft/TextWorld) 
+- TextArena integration is based on [TextArena](https://github.com/LeonGuertler/TextArena) 
