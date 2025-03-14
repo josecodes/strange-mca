@@ -27,7 +27,9 @@ Below are an image of the AgentTree on the left and the LangGraph execution grap
 
 Tasks are decomposed down the AgentTree and responses are synthesized upwards. The execution graph on the right represents the flattened bfs downward and upward traversal of the tree on the left. The graphs were kept separate to allow for full control of execution traversal and to simplify debugging. If scale, concurrency, and/or dynamic routing are desired in the future, it will make sense to move over to LangGraph entirely.
 
+## AI assistant use
 
+Just noting that AI assistants (mostly Cursor with Sonnet 3.7) were used to help write this code.  The core pieces like graph.py, agents.py, prompts.py, and run_strange_mca.py were carefully inspectored, refactored, and thoroughly manually tested for correctness and behavior. Other parts of the repo like tests and visualization.py, and the rest of this README were checked quickly but less carefully. 
 
 ## Features
 
@@ -205,6 +207,10 @@ This system mainly serves as a playground to model MCA and StrangeLoop in a func
 * This is in a very basic form. I'll have to re-read Hofstadter's book to grasp it better but I believe part of the magic comes in hierarchical layers of the loop itself. Not sure what that means exactly, but it currently is only done at the top level.
 * It sometimes entirely replaces the response with its own view.
 * The domain_specific_instructions were an interesting tweak to get the games to run reliably but not sure it belongs in a strange loop logic.
+
+### Tech imporovements
+* I will try to modify this to use local LLMS (MLX on my mac). Something very cool to have an MCA of agents running locally.
+* Should probably consolidate in to one graph, likely LangGraph in the future.
 
 ## Development
 
