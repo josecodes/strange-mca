@@ -110,7 +110,7 @@ print(result["final_response"])
 
 
 ![Curses Chess Interface](assets/curses-chess.png)
-Strange MCA vs. single LLM in Chess-v0
+*Figure: Strange MCA vs. single LLM agent playing Chess-v0 in the curses-based terminal interface*
 
 
 
