@@ -27,9 +27,6 @@ Below are an image of the AgentTree on the left and the LangGraph execution grap
 
 Tasks are decomposed down the AgentTree and responses are synthesized upwards. The execution graph on the right represents the flattened bfs downward and upward traversal of the tree on the left. The graphs were kept separate to allow for full control of execution traversal and to simplify debugging. If scale, concurrency, and/or dynamic routing are desired in the future, it will make sense to move over to LangGraph entirely.
 
-## AI assistant use
-
-AI assistants (mostly Cursor with Sonnet 3.7) were used to help write this code.  The core pieces like graph.py, agents.py, prompts.py, and run_strange_mca.py were carefully inspected, refactored for conciseness and readability, and thoroughly manually tested for correct behavior. Other, less core, parts of the repo like visualization.py, tests, and the rest of this README were checked quickly for correctness but will have a higher slop factor.
 
 ## Features
 
@@ -189,6 +186,10 @@ while not done:
     - `strange_basic_twoplayer.py`: Basic two-player game script
     - `strange_rendered_twoplayer.py`: Two-player game with rendering
 - `output/`: Generated outputs and visualizations
+
+## Note on AI assistant use
+
+Cursor with Sonnet 3.7 was used to help write this code.  The core pieces like graph.py, agents.py, prompts.py, and the TextArena integration were carefully inspected, refactored for conciseness and readability, and thoroughly tested manually for correct behavior. Other, less core, parts of the repo like visualization.py, loggingutils.py, and tests were checked quickly for correctness and run but have a higher slop factor.
 
 ## Future Improvements
 
