@@ -132,7 +132,7 @@ print(result["final_response"])
 
 
 ![Curses Chess Interface](assets/curses-chess.png)
-*Figure: Strange MCA vs. single LLM agent playing chess
+*Figure: Strange MCA vs. single LLM agent playing chess*
 
 
 
