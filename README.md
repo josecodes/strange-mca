@@ -2,7 +2,7 @@
 
 <img src="assets/strange-mca-logo.png" alt="Strange MCA Logo" width="150" align="left" style="margin-right: 20px; margin-bottom: 10px;">
 
-This multiagent system is a simplified model of a Multiscale Competency Architecture (MCA). Since reading about MCAs in [one](https://pubmed.ncbi.nlm.nih.gov/37156924/) of Michael Levin's recent papers, I see MCAs everywhere :).  Levin poses them as a framework to conceptualize how biology organizes itself across multiple scales to solve problems and achieve goals - from cells to tissues to organs to organisms to social groups. I've been looking for a way to model the concept in software, and using LLMs as information processing nodes in an MCA seemed like a fun experiment. 
+This multiagent system is a simplified model of a Multiscale Competency Architecture (MCA). Since reading about MCAs in [one](https://pubmed.ncbi.nlm.nih.gov/37156924/) of Michael Levin's recent papers, I see MCAs everywhere :).  Levin poses them as a framework to conceptualize how biological systems exhibit competence (i.e. problem solving skills) across multiple scales - from cells to tissues to organs to organisms to social groups. I've been looking for a way to model the concept in software, and using LLMs as information processing nodes in an MCA seemed like a fun experiment. 
 
 This system is also inspired by Hofstadter's [Strange Loop](https://en.wikipedia.org/wiki/Strange_loop). There is a bit of (configurable) self-reflection when giving a response to a prompt at the root node in this system. Perhaps this is similar to what today's reasoning models do (albeit in more sophisticated form)
 
@@ -26,6 +26,28 @@ Below are an image of the AgentTree on the left and the LangGraph execution grap
 </div>
 
 Tasks are decomposed down the AgentTree and responses are synthesized upwards. The execution graph on the right represents the flattened bfs downward and upward traversal of the tree on the left. The graphs were kept separate to allow for full control of execution traversal and to simplify debugging. If scale, concurrency, and/or dynamic routing are desired in the future, it will make sense to move over to LangGraph entirely.
+
+## Future Improvements
+
+This system mainly serves as a playground to model MCA and StrangeLoop in a functional way. This will be the focus, not so much things like scale and performance. It may even solve puzzles better than its non-MCA competitors one day.
+
+### MCA Ideas/Improvements
+* This version is very top down and perhaps antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it.
+* Basal cognition will be an interesting concept to play around with. In social groups, I think of culture as the basal cognition layer. Giving these agents cultural system prompts might be interesting.
+* Task-decomposition and response-synthesis functions result in weak multiscale layers at the agent levels but it could be made strong.
+* Agents could be set to different capabilities (ie LLM spec) at different levels.
+* Agents could be have a chat memory to help the system "learn" from good/bad moves.
+* This version is very static. Seems like dynamic routing and perhaps even structure will make sense.
+
+
+### Strange Loop Ideas/Improvements
+* This is in a very basic form. I'll have to re-read Hofstadter's book to grasp it better but I believe part of the magic comes in hierarchical layers of the loop itself. Not sure what that means exactly, but it currently is only done at the top level.
+* It sometimes entirely replaces the response with its own view.
+* The domain_specific_instructions were an interesting tweak to get the games to run reliably but not sure it belongs in a strange loop logic.
+
+### Tech imporovements
+* I will try to modify this to use local LLMS (MLX on my mac). An MCA system of agents running locally just feels right.
+* Should probably consolidate in to one graph, likely LangGraph in the future.
 
 
 ## Features
@@ -191,28 +213,6 @@ while not done:
 ## Note on AI assistant use
 
 Cursor with Sonnet 3.7 was used to help write this code.  The core pieces like graph.py, agents.py, prompts.py, and the TextArena integration were carefully inspected, refactored for conciseness and readability, and thoroughly tested manually for correct behavior. Other, less core, parts of the repo like visualization.py, loggingutils.py, and tests were checked quickly for correctness and run but have a higher slop factor.
-
-## Future Improvements
-
-This system mainly serves as a playground to model MCA and StrangeLoop in a functional way. This will be the focus, not so much things like scale and performance. It may even solve puzzles better than its non-MCA competitors one day.
-
-### MCA Ideas/Improvements
-* This version is very top down and perhaps antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it.
-* Basal cognition will be an interesting concept to play around with. In social groups, I think of culture as the basal cognition layer. Giving these agents cultural system prompts might be interesting.
-* Task-decomposition and response-synthesis functions result in weak multiscale layers at the agent levels but it could be made strong.
-* Agents could be set to different capabilities (ie LLM spec) at different levels.
-* Agents could be have a chat memory to help the system "learn" from good/bad moves.
-* This version is very static. Seems like dynamic routing and perhaps even structure will make sense.
-*
-
-### Strange Loop Ideas/Improvements
-* This is in a very basic form. I'll have to re-read Hofstadter's book to grasp it better but I believe part of the magic comes in hierarchical layers of the loop itself. Not sure what that means exactly, but it currently is only done at the top level.
-* It sometimes entirely replaces the response with its own view.
-* The domain_specific_instructions were an interesting tweak to get the games to run reliably but not sure it belongs in a strange loop logic.
-
-### Tech imporovements
-* I will try to modify this to use local LLMS (MLX on my mac). Something very cool to have an MCA of agents running locally.
-* Should probably consolidate in to one graph, likely LangGraph in the future.
 
 ## Development
 
