@@ -29,7 +29,7 @@ Tasks are decomposed down the AgentTree and responses are synthesized upwards. T
 
 ## AI assistant use
 
-Just noting that AI assistants (mostly Cursor with Sonnet 3.7) were used to help write this code.  The core pieces like graph.py, agents.py, prompts.py, and run_strange_mca.py were carefully inspectored, refactored, and thoroughly manually tested for correctness and behavior. Other less core parts of the repo like visualization.py, tests, and the rest of this README were checked quickly but less carefully. 
+AI assistants (mostly Cursor with Sonnet 3.7) were used to help write this code.  The core pieces like graph.py, agents.py, prompts.py, and run_strange_mca.py were carefully inspected, refactored for conciseness and readability, and thoroughly manually tested for correct behavior. Other, less core, parts of the repo like visualization.py, tests, and the rest of this README were checked quickly for correctness but will have a higher slop factor.
 
 ## Features
 
