@@ -34,7 +34,7 @@ This system mainly serves as a playground to model MCA and StrangeLoop in a func
 ### MCA 
 * This version is very top down. Perhaps this is antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it.
 * Basal cognition will be an interesting concept to play around with. In social groups, I think of culture as the basal cognition layer. Giving these agents cultural system prompts might be interesting.
-* Task-decomposition and response-synthesis functions result in weak multiscale layers at the agent levels but it could be made strong.
+* Could be more intentional in levels bending the problem space of sublevels to meet its goals - a key aspect of MCA. Task-decomposition and response-synthesis functions result in weak multiscale layers. 
 * Agents could be set to different capabilities (ie LLM spec) at different levels.
 * Agents could be have a chat memory to help the system "learn" from good/bad moves.
 * This version is very static/rigid. Seems like dynamic routing and perhaps even structure will make sense.
@@ -214,7 +214,7 @@ while not done:
 
 ## Note on AI assistant use
 
-AI assistants (mostly Cursor) were used to help write this.  The core pieces like graph.py, agents.py, prompts.py, and the TextArena integration were carefully inspected, refactored for conciseness, and thoroughly tested for correct behavior. Other, less core, parts of the repo like visualization.py, loggingutils.py, and tests were checked quickly for correctness and run but have a higher slop factor.
+AI assistants (mostly Cursor) were used to help write this.  The core pieces like graph.py, agents.py, prompts.py, and the TextArena integration were carefully inspected, refactored for conciseness, and tested for correct behavior. Other, less core, parts of the repo like visualization.py, loggingutils.py, and `tests/` were checked for correctness but not as carefully inspected. Future refactor may make sense there.
 
 ## Development
 
