@@ -10,7 +10,7 @@ For both MCA and Strange Loop concepts, this system is a minimal (but fun) attem
 
 I thought it would make for interesting behavior and comparisons to point this at an OpenAI GYM style environment like TextArena to see it play chess and other games against other LLMs. So I have included TextArena integration code in the `examples` section.
 
-Probably the most fun thing to do with it right now is to have it play a game of chess against a single LLM of the same spec. They play about as well as you'd expect a LLM to play chess, but it is interesting to see agents decompose a problem into lower levels, synthesize them upwards, and then see the strange loop do its thing on the final response. In the `assets` directory there is an example output `final_state.json` that shows the first turn `state` object for the strange-mca set at 2 child-per-node, 3 levels, and gpt-4o-mini. All the messy chatter in its full glory to look through if it sounds interesting. This json is produced for every execution of strange-mca.
+Probably the most fun thing to do with it right now, besides asking ambigious or absurd questions is to have it play a game of chess against a single LLM of the same spec. They play about as well as you'd expect a LLM to play chess, but it is interesting to see agents decompose a problem into lower levels, synthesize them upwards, and then see the strange loop do its thing on the final response. In the `assets` directory there is an example output `final_state.json` that shows the first turn `state` object for the strange-mca set at 2 child-per-node, 3 levels, and gpt-4o-mini. All the messy chatter in its full glory to look through if it sounds interesting. This json is produced in the output dir for every execution of strange-mca.
 
 ## High Level Architecture
 
@@ -29,7 +29,7 @@ Tasks are decomposed down the AgentTree and responses are synthesized upwards. T
 
 ## Future Improvements
 
-This system mainly serves as a playground to model MCA and StrangeLoop in a functional way. This will be the focus, not so much things like scale and performance. It may even solve puzzles better than its non-MCA competitors one day.
+This system mainly serves as a playground to model MCA and StrangeLoop in a functional way. This will be the focus, not so much things like scale and performance. It may even solve puzzles better than its non-MCA competitors one day. The current level of chess competition is mostly about tied on who can send invalid response last. Future more powerful agents will make this more interesting competition.
 
 ### MCA Ideas/Improvements
 * This version is very top down. Perhaps this is antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it.
@@ -212,7 +212,7 @@ while not done:
 
 ## Note on AI assistant use
 
-Cursor with Sonnet 3.7 was used to help write this code.  The core pieces like graph.py, agents.py, prompts.py, and the TextArena integration were carefully inspected, refactored for conciseness and readability, and thoroughly tested manually for correct behavior. Other, less core, parts of the repo like visualization.py, loggingutils.py, and tests were checked quickly for correctness and run but have a higher slop factor.
+Cursor with Sonnet 3.7 was used to help write this code.  The core pieces like graph.py, agents.py, prompts.py, and the TextArena integration were carefully inspected, refactored for conciseness, and thoroughly tested for correct behavior. Other, less core, parts of the repo like visualization.py, loggingutils.py, and tests were checked quickly for correctness and run but have a higher slop factor.
 
 ## Development
 
