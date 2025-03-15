@@ -214,7 +214,7 @@ while not done:
 
 ## Note on AI assistant use
 
-Cursor with Sonnet 3.7 was used to help write this code.  The core pieces like graph.py, agents.py, prompts.py, and the TextArena integration were carefully inspected, refactored for conciseness, and thoroughly tested for correct behavior. Other, less core, parts of the repo like visualization.py, loggingutils.py, and tests were checked quickly for correctness and run but have a higher slop factor.
+AI assistants (mostly Cursor) were used to help write this.  The core pieces like graph.py, agents.py, prompts.py, and the TextArena integration were carefully inspected, refactored for conciseness, and thoroughly tested for correct behavior. Other, less core, parts of the repo like visualization.py, loggingutils.py, and tests were checked quickly for correctness and run but have a higher slop factor.
 
 ## Development
 
