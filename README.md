@@ -14,7 +14,7 @@ Probably the most fun thing to do with it right now, besides asking ambigious or
 
 ## High Level Architecture
 
-The `AgentTree` class in agents.py represents the conceptual MCA structure of the system. This uses a networkx directed graph as the core conceptual structure.
+The `AgentTree` class in agents.py represents the conceptual MCA structure of the system. This uses a networkx directed graph at its core.
 
 Separately, the `exectution_graph` in graph.py represents the execution graph for processing to propogate through the system. This uses LangGraph. 
 
