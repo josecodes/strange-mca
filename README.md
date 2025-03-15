@@ -29,7 +29,7 @@ Tasks are decomposed down the AgentTree and responses are synthesized upwards. T
 
 ## Future Improvements
 
-This system mainly serves as a playground to model MCA and StrangeLoop in a functional way. This will be the focus, not so much things like scale and performance. It may even solve puzzles better than its non-MCA competitors one day. The current level of chess competition is mostly about tied on who can send invalid response last. Future more powerful agents will make this more interesting competition.
+This system mainly serves as a playground to model MCA and StrangeLoop in a functional way. This will be the focus, not so much things like scale and performance. It may even solve puzzles better than its non-MCA competitors one day. The current level of chess competition is mostly about tied on who can send an invalid response last. Future more powerful agents will make this more interesting competition.
 
 ### MCA Ideas/Improvements
 * This version is very top down. Perhaps this is antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it.
