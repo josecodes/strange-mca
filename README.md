@@ -29,7 +29,7 @@ Tasks are decomposed down the AgentTree and responses are synthesized upwards. T
 
 ## Future Ideas and Improvements
 
-This system mainly serves as a playground to model MCA and StrangeLoop in a functional way. This will be the focus, not so much things like scale and performance. It may even solve puzzles better than its non-MCA competitors one day. The current level of chess competition is mostly about tied on who can send an invalid response last. Future more powerful agents will make this a more interesting competition.
+This system mainly serves as a conceptual playground to model MCA and StrangeLoop in a multiagent system; this will be the focus, not so much a production system or things like scale and performance. It may solve puzzles better than its non-MCA competitors one day. However, the current level of chess competition is mostly about even on who can send an invalid response last. Future more powerful agents will make this a more interesting competition. 
 
 ### MCA 
 * This version is very top down. Perhaps this is antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it.
@@ -50,6 +50,10 @@ This system mainly serves as a playground to model MCA and StrangeLoop in a func
 * Should probably consolidate in to one graph, likely LangGraph in the future.
 * Keeping the heirarchy below 3 levels seems about right. Things get slow and wonky at four levels or more. Similar to human orgs. :) It would be interesting to play at larger scales though. 
 * Multimodal would be interesting. But there is something elegant about the simplicity about text input/outputs. Very unixy.
+* Logs could get cleaned up.
+* Test were entirely generated with Cursor, and lightly inspected. It serves as some measure of testing, but they should be reviewed.
+* In general, the codebase has a medium level of slop (not entirely Cursor's fault.) Not intended to be a production system, but could use some more review for readability and avoiding problems down the line.
+* I should move these issues in to GitHub Issues. (self-reflective issue?)
 
 
 ## Features
