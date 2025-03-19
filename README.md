@@ -8,7 +8,7 @@ This system is also inspired by Hofstadter's [Strange Loop](https://en.wikipedia
 
 For both MCA and Strange Loop concepts, this system is a minimal (but fun) attempt at running a multiagent system that models these concepts. In the *Future Ideas and Improvements* section near the end, I share some thoughts for iteration on the system.
 
-I thought it would make for interesting behavior and comparisons to point this at an OpenAI GYM style environment like TextArena to see it play chess and other games against other LLMs. So I have included TextArena integration code in the `examples` section.
+I thought it would make for interesting behavior and comparisons to point this at an OpenAI Gym style environment like TextArena to see it play chess and other games against other LLMs. So I have included TextArena integration code in the `examples` section.
 
 Probably the most fun thing to do with it right now, besides asking ambigious or absurd questions, is to have it play a game of chess against a single LLM of the same spec. They play about as well as you'd expect a LLM to play chess, but it is interesting to see agents decompose a problem into lower levels, synthesize them upwards, and then see the strange loop do its thing on the final response. In the `assets` directory there is an example output `final_state.json` that shows the first turn `state` object for the strange-mca set at 2 child-per-node, 3 levels, and gpt-4o-mini. All the messy chatter in its full glory to look through if it sounds interesting. This json is produced in the output dir for every execution of strange-mca. The json file is the main way to inspect how the agents behaved. You can also play with cmd line args to get more info in stdout.
 
@@ -29,7 +29,7 @@ Tasks are decomposed down the AgentTree and responses are synthesized upwards. T
 
 ## Future Ideas and Improvements
 
-This system mainly serves as a conceptual playground to model MCA and StrangeLoop in a multiagent system; this will be the focus, not so much a production system or things like scale and performance. It may solve puzzles better than its non-MCA competitors one day. However, the current level of chess competition is mostly about even on who can send an invalid response last. Future more powerful agents will make this a more interesting competition. 
+This system mainly serves as a conceptual playground to model MCA and StrangeLoop in a multiagent system; this will be the focus, not so much a production system or things like scale and performance. It may solve puzzles better than its non-MCA competitors one day; the current level of chess competition is about even and is about who can send an invalid response last, as you might expect. Future more powerful agents will make this a more interesting competition. 
 
 ### MCA 
 * This version is very top down. Perhaps this is antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it.
