@@ -29,7 +29,7 @@ Tasks are decomposed down the AgentTree and responses are synthesized upwards. T
 
 ## Future Ideas and Improvements
 
-This system mainly serves as a conceptual playground to model MCA and StrangeLoop in a multiagent system; this will be the focus, not so much a production system or things like scale and performance. It may solve puzzles better than its non-MCA competitors one day; the current level of chess competition is about even and is about who can send an invalid response last, as you might expect. Future more powerful agents will make this a more interesting competition. 
+This system mainly serves as a conceptual playground to model MCA and StrangeLoop in a multiagent system; this will be the focus, not building a production system or things like scale and performance. It may solve puzzles better than its non-MCA competitors one day; the current level of chess competition is about even and is about who can send an invalid response last, as you might expect. Future more powerful agents will make this a more interesting competition. 
 
 ### MCA 
 * This version is very top down. Perhaps this is antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it.
@@ -51,8 +51,8 @@ This system mainly serves as a conceptual playground to model MCA and StrangeLoo
 * Keeping the heirarchy below 3 levels seems about right. Things get slow and wonky at four levels or more. Similar to human orgs. :) It would be interesting to play at larger scales though. 
 * Multimodal would be interesting. But there is something elegant about the simplicity about text input/outputs. Very unixy.
 * Logs could get cleaned up.
-* Test were entirely generated with Cursor, and lightly inspected. It serves as some measure of testing, but they should be reviewed.
-* In general, the codebase has a medium level of slop (not entirely Cursor's fault.) Not intended to be a production system, but could use some more review for readability and avoiding problems down the line.
+* Test were entirely generated with Cursor, and lightly inspected. It serves as some baseline measure of testing, but they need human attention.
+* The codebase has some slop (not entirely Cursor's fault.) Not intended to be a production system, but could use some more review for readability and avoiding problems down the line. More info in the "Note on AI Code Assistant" section.
 * I should move these issues in to GitHub Issues. (self-reflective issue?)
 
 
@@ -216,9 +216,9 @@ while not done:
     - `strange_rendered_twoplayer.py`: Two-player game with rendering
 - `output/`: Generated outputs and visualizations
 
-## Note on AI assistant use
+## Note on AI code assistants
 
-AI assistants (mostly Cursor) were used to help write this.  The core pieces like graph.py, agents.py, prompts.py, and the TextArena integration were carefully inspected, refactored for conciseness, and tested for correct behavior. Other, less core, parts of the repo like visualization.py, loggingutils.py, and `tests/` were checked for correctness but not as carefully inspected. Future refactor may make sense there.
+AI assistants (mostly Cursor) were used to help write this.  The core pieces like graph.py, agents.py, prompts.py, and the TextArena integration were carefully inspected, refactored for conciseness/correctness, and tested for correct behavior. Other less core parts of the repo like visualization.py, loggingutils.py, and `tests/` were checked for correctness but not as carefully inspected. Future refactor may make sense there.
 
 ## Development
 
