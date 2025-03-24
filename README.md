@@ -46,7 +46,7 @@ This system mainly serves as a conceptual playground to model MCA and StrangeLoo
 * The domain_specific_instructions were an interesting tweak to get the games to run reliably but not sure it belongs in a strange loop logic.
 
 ### Tech improvements
-* I will try to modify this to use local LLMS (MLX on my mac). An MCA system of agents running locally just feels right.
+* Will add local LLM capability, MLX on my mac. An MCA system of agents running locally just feels right.
 * Should probably consolidate in to one graph, likely LangGraph in the future.
 * Keeping the heirarchy below 3 levels seems about right. Things get slow and wonky at four levels or more. Similar to human orgs. :) It would be interesting to play at larger scales though. 
 * Multimodal would be interesting. But there is something elegant about the simplicity about text input/outputs. Very unixy.
