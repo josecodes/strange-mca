@@ -64,20 +64,32 @@ class StrangeMCAAgent(ta.Agent):
         Returns:
             The action to take.
         """
-        # Format the task if a template is provided
-        if self.task_template:
-            task = self.task_template.format(observation=observation)
-        else:
-            task = observation
-        result = run_strange_mca(
-            task=task,
-            child_per_parent=self.child_per_parent,
-            depth=self.depth,
-            model=self.model,
-            viz=self.viz,
-            print_details=self.print_details,
-            domain_specific_instructions=self.domain_specific_instructions,
-            strange_loop_count=self.strange_loop_count,
-        )
-        final_response = result.get("final_response", "")
-        return final_response
+        try:
+            # Format the task if a template is provided
+            if self.task_template:
+                task = self.task_template.format(observation=observation)
+            else:
+                task = observation
+
+            result = run_strange_mca(
+                task=task,
+                child_per_parent=self.child_per_parent,
+                depth=self.depth,
+                model=self.model,
+                viz=self.viz,
+                print_details=self.print_details,
+                domain_specific_instructions=self.domain_specific_instructions,
+                strange_loop_count=self.strange_loop_count,
+            )
+            final_response = result.get("final_response", "")
+
+            # Fallback if no response generated
+            if not final_response or not final_response.strip():
+                return "I need more information to proceed."
+
+            return final_response
+
+        except Exception as e:
+            # Log the error and return a safe fallback response
+            print(f"Error in StrangeMCA agent: {e}")
+            return "I encountered an error processing that request."

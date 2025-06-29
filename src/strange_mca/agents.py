@@ -172,6 +172,8 @@ class AgentTree:
         """
         if start_node is None:
             start_node = self.get_root()
+            if start_node is None:
+                raise ValueError("No root node found in the tree")
 
         # Use NetworkX's BFS to traverse the tree downward
         traversal = list(nx.bfs_tree(self.mca_graph, source=start_node))

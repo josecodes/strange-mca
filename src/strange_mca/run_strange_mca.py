@@ -30,9 +30,9 @@ def run_strange_mca(
     child_per_parent: int = 2,
     depth: int = 2,
     model: str = "gpt-3.5-turbo",
-    log_level: str = "warn",
+    log_level: str = "info",
     viz: bool = False,
-    all_logs: bool = False,
+    local_logs_only: bool = False,
     print_details: bool = False,
     output_dir: Optional[str] = None,
     domain_specific_instructions: Optional[str] = "",
@@ -48,7 +48,7 @@ def run_strange_mca(
         model: The model to use.
         log_level: The log level to use.
         viz: Whether to generate visualizations.
-        all_logs: Whether to show logs from dependencies in addition to local logs.
+        local_logs_only: Whether to show only logs from strange_mca, suppress dependency logs.
         print_details: Whether to print detailed information.
         output_dir: The output directory to use. If None, a directory will be created.
         domain_specific_instructions: Domain-specific instructions to include in the strange loop prompt.
@@ -61,13 +61,13 @@ def run_strange_mca(
     if not isinstance(numeric_level, int):
         raise ValueError(f"Invalid log level: {log_level}")
 
-    if all_logs:
-        logging.basicConfig(level=numeric_level)
-    else:
+    if local_logs_only:
         logging.basicConfig(
             level=numeric_level,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         )
+    else:
+        logging.basicConfig(level=numeric_level)
 
     # Create output directory if not provided
     if output_dir is None:
@@ -116,7 +116,7 @@ def run_strange_mca(
         execution_graph=graph,
         task=task,
         log_level=log_level,
-        only_local_logs=not all_logs,  # Invert the behavior
+        only_local_logs=local_logs_only,
         langgraph_viz_dir=None,  # We've already handled visualization
     )
 
@@ -180,5 +180,5 @@ if __name__ == "__main__":
         model="gpt-3.5-turbo",
         log_level="info",
         viz=True,
-        all_logs=False,
+        local_logs_only=False,
     )
