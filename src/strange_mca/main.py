@@ -83,9 +83,9 @@ def main():
         help="Logging level (debug, info, warning, error, critical)",
     )
     parser.add_argument(
-        "--all_logs",
+        "--local-logs-only",
         action="store_true",
-        help="Show logs from dependencies in addition to local logs",
+        help="Show only logs from strange_mca, suppress dependency logs",
     )
     parser.add_argument(
         "--viz",
@@ -120,13 +120,13 @@ def main():
 
     # Set up logging
     log_level = getattr(logging, args.log_level.upper())
-    if args.all_logs:
-        logging.basicConfig(level=log_level)
-    else:
+    if args.local_logs_only:
         logging.basicConfig(
             level=log_level,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         )
+    else:
+        logging.basicConfig(level=log_level)
 
     # Generate output directory
     output_dir = create_output_dir(args.child_per_parent, args.depth, args.model)
@@ -201,7 +201,7 @@ def main():
         execution_graph=graph,
         task=args.task,
         log_level=args.log_level,
-        only_local_logs=args.all_logs,
+        only_local_logs=args.local_logs_only,
         langgraph_viz_dir=None,  # We've already handled visualization
     )
 

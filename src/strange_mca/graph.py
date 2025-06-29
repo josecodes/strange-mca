@@ -196,7 +196,9 @@ def create_execution_graph(
                         )
                         response = parse_strange_loop_response(strange_loop_response)
                     state_updates["strange_loops"] = strange_loops
-                    state_updates["final_response"] = response
+
+                # Always set final_response for root node
+                state_updates["final_response"] = response
 
         return state_updates
 
@@ -218,6 +220,13 @@ def create_execution_graph(
 
     down_list = agent_tree.perform_down_traversal(node_callback=add_lg_node_edge)
     up_list = agent_tree.perform_up_traversal(node_callback=add_lg_node_edge)
+
+    # Validate traversal lists are not empty
+    if not down_list:
+        raise ValueError("Down traversal returned empty list")
+    if not up_list:
+        raise ValueError("Up traversal returned empty list")
+
     lg_graph_builder.add_edge(down_list[-1] + "_down", up_list[0] + "_up")
     lg_graph_builder.add_edge(down_list[0] + "_up", END)
 
@@ -264,15 +273,11 @@ def run_execution_graph(
     # Create a callback handler for detailed logging
     callback_handler = DetailedLoggingCallbackHandler()
 
-    # Find the root node of the graph
-    at_root_node = None
-    for lg_node in execution_graph.get_graph().nodes:
-        if lg_node.endswith("_down") and "_" not in lg_node.split("_down")[0]:
-            at_root_node = lg_node.split("_down")[0]
-            break
-
-    if not at_root_node:
-        raise ValueError("Could not find root node in the graph")
+    # Find the root node of the graph (always L1N1)
+    if "L1N1_down" in execution_graph.get_graph().nodes:
+        at_root_node = "L1N1"
+    else:
+        raise ValueError("Root node L1N1_down not found in execution graph")
 
     logger.info(f"Identified root node: {at_root_node}")
 
@@ -289,9 +294,14 @@ def run_execution_graph(
     logger.info("Running bidirectional graph...")
 
     try:
+        # Calculate recursion limit based on graph size
+        # Each node has down + up passes, plus some buffer for strange loops
+        num_nodes = len(execution_graph.get_graph().nodes)
+        recursion_limit = max(100, num_nodes * 2 + 50)
+
         # Run the graph with the initial state
         config = RunnableConfig(
-            callbacks=[callback_handler], recursion_limit=1000  # TODO: calculate this?
+            callbacks=[callback_handler], recursion_limit=recursion_limit
         )
         result = execution_graph.invoke(initial_state, config=config)
         return result
