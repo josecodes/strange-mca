@@ -32,7 +32,7 @@ Tasks are decomposed down the AgentTree and responses are synthesized upwards. T
 This system mainly serves as a conceptual playground to model MCA and StrangeLoop in a multiagent system; this will be the focus, not building a production system or things like scale and performance. It may solve puzzles better than its non-MCA competitors one day; the current level of chess competition is about even and is about who can send an invalid response last, as you might expect. Future more powerful agents will make this a more interesting competition. 
 
 ### MCA 
-* This version is very top down. Perhaps this is antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it.
+* This version is very top down. Perhaps this is antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it. Modeling probably starts at protein interaction networks (fuzzy, combinatoral logic) and goes up the causal emergence stack. See Chapter 4 Proteins and 5 Networks of Phillip Ball's "How Life Works" book for more ideas.
 * Basal cognition will be an interesting concept to play around with. In social groups, I think of culture as the basal cognition layer. Giving these agents cultural system prompts might be interesting.
 * Could be more intentional in levels bending the problem space of sublevels to meet its goals - a key aspect of MCA. Task-decomposition and response-synthesis functions result in weak multiscale layers. 
 * Agents could be set to different capabilities (ie LLM spec) at different levels.
