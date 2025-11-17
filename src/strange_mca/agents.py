@@ -37,10 +37,10 @@ class Agent:
         """
         self.config = config
         # Use a real OpenAI LLM
-        # GPT-5 series only supports default temperature (1), so explicitly set it to 1.0
+        # GPT-5 series does not support the temperature parameter (fixed at 1), so don't pass it
         model_name_normalized = model_name.strip().lower()
         if model_name_normalized.startswith("gpt-5"):
-            self.llm = ChatOpenAI(model_name=model_name, temperature=1.0)
+            self.llm = ChatOpenAI(model_name=model_name)
         else:
             self.llm = ChatOpenAI(model_name=model_name, temperature=0.7)
 
