@@ -37,7 +37,12 @@ class Agent:
         """
         self.config = config
         # Use a real OpenAI LLM
-        self.llm = ChatOpenAI(model_name=model_name, temperature=0.7)
+        # GPT-5 series only supports default temperature (1), so explicitly set it to 1.0
+        model_name_normalized = model_name.strip().lower()
+        if model_name_normalized.startswith("gpt-5"):
+            self.llm = ChatOpenAI(model_name=model_name, temperature=1.0)
+        else:
+            self.llm = ChatOpenAI(model_name=model_name, temperature=0.7)
 
         # Create the prompt template for this agent
         self.prompt_template = PromptTemplate.from_template(

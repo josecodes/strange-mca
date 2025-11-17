@@ -17,8 +17,8 @@ load_dotenv()
 def main():
     """Run a two-player game between a Strange MCA multi-agent team and an OpenAI model."""
     # Define model names and create player name mapping
-    openai_model = "gpt-4o-mini"
-    strange_mca_config = {"child_per_parent": 2, "depth": 3, "model": "gpt-4o-mini"}
+    openai_model = "gpt-5-mini"
+    strange_mca_config = {"child_per_parent": 2, "depth": 2, "model": "gpt-5-mini"}
 
     player_names = {
         0: f"Strange MCA Team ({strange_mca_config['model']})",
