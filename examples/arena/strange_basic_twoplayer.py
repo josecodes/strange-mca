@@ -32,8 +32,8 @@ def parse_args():
     parser.add_argument(
         "--model",
         type=str,
-        default="gpt-4o-mini",
-        help="Model to use (default: gpt-4o-mini)",
+        default="gpt-5.1",
+        help="Model to use (default: gpt-5.1)",
     )
     parser.add_argument(
         "--strange-loops",
