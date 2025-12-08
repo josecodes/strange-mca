@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 
@@ -14,11 +15,46 @@ from examples.arena.strangemca_textarena import StrangeMCAAgent
 load_dotenv()
 
 
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Run a two-player chess game between Strange MCA and OpenAI"
+    )
+    parser.add_argument(
+        "--depth", type=int, default=2, help="Depth of the agent tree (default: 2)"
+    )
+    parser.add_argument(
+        "--children",
+        type=int,
+        default=2,
+        help="Number of children per parent node (default: 2)",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="gpt-4o-mini",
+        help="Model to use (default: gpt-4o-mini)",
+    )
+    parser.add_argument(
+        "--strange-loops",
+        type=int,
+        default=1,
+        help="Number of strange loop iterations (default: 1)",
+    )
+    return parser.parse_args()
+
+
 def main():
     """Run a two-player game between a Strange MCA multi-agent team and an OpenAI model."""
+    args = parse_args()
+
     # Define model names and create player name mapping
-    openai_model = "gpt-4o-mini"
-    strange_mca_config = {"child_per_parent": 2, "depth": 2, "model": "gpt-4o-mini"}
+    openai_model = args.model
+    strange_mca_config = {
+        "child_per_parent": args.children,
+        "depth": args.depth,
+        "model": args.model,
+    }
 
     player_names = {
         0: f"Strange MCA Team ({strange_mca_config['model']})",
@@ -35,7 +71,7 @@ def main():
             viz=False,
             print_details=True,
             domain_specific_instructions=domain_specific_instructions,
-            strange_loop_count=1,
+            strange_loop_count=args.strange_loops,
         ),
         1: ta.agents.OpenAIAgent(
             model_name=openai_model,
