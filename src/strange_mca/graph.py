@@ -108,6 +108,8 @@ def create_execution_graph(
             nodes[lg_node_name]["response"] = response
 
             # Parse the response to extract tasks for children
+            # Include original task context so children have full information
+            original_task = state["original_task"]
             for agent_child in agent_children:
                 lg_child_down = f"{agent_child}_down"
                 if lg_child_down not in nodes:
@@ -116,7 +118,9 @@ def create_execution_graph(
                 task_found = False
                 for line in response.split("\n"):
                     if line.startswith(child_task_prefix):
-                        child_task = line[len(child_task_prefix) :].strip()
+                        child_subtask = line[len(child_task_prefix) :].strip()
+                        # Combine original task context with the specific subtask
+                        child_task = f"Original task context:\n{original_task}\n\nYour specific assignment:\n{child_subtask}"
                         nodes[lg_child_down]["task"] = child_task
                         task_found = True
                         break
