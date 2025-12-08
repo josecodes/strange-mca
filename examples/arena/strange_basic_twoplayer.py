@@ -18,7 +18,7 @@ def main():
     """Run a two-player game between a Strange MCA multi-agent team and an OpenAI model."""
     # Define model names and create player name mapping
     openai_model = "gpt-4o-mini"
-    strange_mca_config = {"child_per_parent": 2, "depth": 3, "model": "gpt-4o-mini"}
+    strange_mca_config = {"child_per_parent": 2, "depth": 2, "model": "gpt-4o-mini"}
 
     player_names = {
         0: f"Strange MCA Team ({strange_mca_config['model']})",
@@ -35,7 +35,7 @@ def main():
             viz=False,
             print_details=True,
             domain_specific_instructions=domain_specific_instructions,
-            strange_loop_count=3,
+            strange_loop_count=1,
         ),
         1: ta.agents.OpenAIAgent(
             model_name=openai_model,
