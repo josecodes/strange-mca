@@ -129,7 +129,9 @@ def visualize_agent_tree(
             return output_file
         except Exception as dot_e:
             logger.warning(f"Could not convert dot to image using Graphviz: {dot_e}")
-            logger.info(f"For example: dot -Tpng {output_path}.dot -o {output_path}.png")
+            logger.info(
+                f"For example: dot -Tpng {output_path}.dot -o {output_path}.png"
+            )
             return f"{output_path}.dot"
     else:
         return None

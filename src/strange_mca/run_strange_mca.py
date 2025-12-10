@@ -13,7 +13,11 @@ from typing import Any, Optional
 
 from dotenv import load_dotenv
 
-from src.strange_mca.graph import create_execution_graph, run_execution_graph, total_nodes
+from src.strange_mca.graph import (
+    create_execution_graph,
+    run_execution_graph,
+    total_nodes,
+)
 from src.strange_mca.main import create_output_dir
 from src.strange_mca.visualization import visualize_agent_tree, visualize_langgraph
 

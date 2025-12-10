@@ -129,7 +129,9 @@ def test_main_function(
 @patch("src.strange_mca.main.load_dotenv")
 @patch("src.strange_mca.main.create_output_dir")
 @patch("src.strange_mca.main.total_nodes")
-def test_main_dry_run(mock_total_nodes, mock_create_dir, mock_load_dotenv, mock_arg_parser):
+def test_main_dry_run(
+    mock_total_nodes, mock_create_dir, mock_load_dotenv, mock_arg_parser
+):
     """Test the main function with dry_run=True."""
     # Mock the argument parser
     mock_parser = MagicMock()

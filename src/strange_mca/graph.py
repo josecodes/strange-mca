@@ -9,7 +9,6 @@ The graph structure mirrors the conceptual agent tree - no separate NetworkX gra
 """
 
 import logging
-import operator
 from typing import Annotated, Any, Optional, TypedDict
 
 from langchain_core.runnables import RunnableConfig

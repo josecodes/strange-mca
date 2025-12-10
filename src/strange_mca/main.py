@@ -15,7 +15,11 @@ import os
 
 from dotenv import load_dotenv
 
-from src.strange_mca.graph import create_execution_graph, run_execution_graph, total_nodes
+from src.strange_mca.graph import (
+    create_execution_graph,
+    run_execution_graph,
+    total_nodes,
+)
 from src.strange_mca.visualization import (
     print_agent_tree,
     visualize_agent_tree,

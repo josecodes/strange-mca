@@ -6,17 +6,16 @@ import pytest
 
 from src.strange_mca.graph import (
     State,
+    count_nodes_at_level,
     create_execution_graph,
-    run_execution_graph,
-    parse_node_name,
-    make_node_name,
     get_children,
     is_leaf,
     is_root,
-    count_nodes_at_level,
+    make_node_name,
+    parse_node_name,
+    run_execution_graph,
     total_nodes,
 )
-
 
 # =============================================================================
 # Tree Helper Function Tests
@@ -166,7 +165,10 @@ def test_run_execution_graph_setup(mock_setup_logging):
     """Test the setup phase of run_execution_graph."""
     # Create a mock graph
     mock_graph = MagicMock()
-    mock_graph.invoke.return_value = {"response": "Test response", "final_response": "Test response"}
+    mock_graph.invoke.return_value = {
+        "response": "Test response",
+        "final_response": "Test response",
+    }
 
     # Run the function
     result = run_execution_graph(
