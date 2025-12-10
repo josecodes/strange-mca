@@ -34,10 +34,10 @@ Your task is to break down the following task into subtasks for your team member
 You have the following team members that need assignments:
 {child_nodes_str}
 
-For each team member, create a specific subtask that:
-1. Is clearly described and actionable
-2. Includes any specific instructions or constraints
-3. Contributes meaningfully to the overall task
+Each team member works independently (they cannot see each other's work).
+For each, create a specific subtask that:
+1. Is self-contained and actionable without depending on other members' outputs
+2. Contributes meaningfully to the overall task
 
 Format your response with one subtask per team member, using their exact name as the prefix:
 

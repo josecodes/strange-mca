@@ -19,7 +19,7 @@ def test_strangemca_agent_init(mock_run_strange_mca):
     agent = StrangeMCAAgent()
 
     # Check that the default parameters are set correctly
-    assert agent.child_per_parent == 3
+    assert agent.child_per_parent == 2
     assert agent.depth == 2
     assert agent.model == "gpt-3.5-turbo"
     assert agent.viz is False
@@ -30,7 +30,7 @@ def test_strangemca_agent_init(mock_run_strange_mca):
 
     # Create an agent with custom parameters
     agent = StrangeMCAAgent(
-        child_per_parent=2,
+        child_per_parent=3,
         depth=3,
         model="gpt-4",
         viz=True,
@@ -41,7 +41,7 @@ def test_strangemca_agent_init(mock_run_strange_mca):
     )
 
     # Check that the custom parameters are set correctly
-    assert agent.child_per_parent == 2
+    assert agent.child_per_parent == 3
     assert agent.depth == 3
     assert agent.model == "gpt-4"
     assert agent.viz is True
@@ -66,7 +66,7 @@ def test_strangemca_agent_call(mock_run_strange_mca):
     # Check that run_strange_mca was called with the correct parameters
     mock_run_strange_mca.assert_called_once_with(
         task="What is the capital of France?",
-        child_per_parent=3,
+        child_per_parent=2,
         depth=2,
         model="gpt-3.5-turbo",
         viz=False,
@@ -96,7 +96,7 @@ def test_strangemca_agent_with_template(mock_run_strange_mca):
     # Check that run_strange_mca was called with the correct parameters
     mock_run_strange_mca.assert_called_once_with(
         task="Answer the following question: What is the capital of France?",
-        child_per_parent=3,
+        child_per_parent=2,
         depth=2,
         model="gpt-3.5-turbo",
         viz=False,

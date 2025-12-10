@@ -30,6 +30,7 @@ def test_create_output_dir():
 @patch("src.strange_mca.main.argparse.ArgumentParser")
 @patch("src.strange_mca.main.load_dotenv")
 @patch("src.strange_mca.main.create_output_dir")
+@patch("src.strange_mca.main.total_nodes")
 @patch("src.strange_mca.main.create_execution_graph")
 @patch("src.strange_mca.main.run_execution_graph")
 @patch("builtins.open", new_callable=mock_open)
@@ -41,6 +42,7 @@ def test_main_function(
     mock_file_open,
     mock_run_graph,
     mock_create_graph,
+    mock_total_nodes,
     mock_create_dir,
     mock_load_dotenv,
     mock_arg_parser,
@@ -57,7 +59,7 @@ def test_main_function(
     mock_args.depth = 2
     mock_args.model = "gpt-3.5-turbo"
     mock_args.log_level = "info"
-    mock_args.all_logs = False
+    mock_args.local_logs_only = False
     mock_args.viz = False
     mock_args.dry_run = False
     mock_args.print_tree = False
@@ -65,6 +67,9 @@ def test_main_function(
     mock_args.domain_specific_instructions = ""
     mock_args.strange_loop_count = 0
     mock_parser.parse_args.return_value = mock_args
+
+    # Mock total_nodes
+    mock_total_nodes.return_value = 3
 
     # Mock the output directory
     mock_create_dir.return_value = "output/test_dir"
@@ -107,7 +112,7 @@ def test_main_function(
         execution_graph=mock_graph,
         task=mock_args.task,
         log_level=mock_args.log_level,
-        only_local_logs=mock_args.all_logs,
+        only_local_logs=mock_args.local_logs_only,
         langgraph_viz_dir=None,
     )
 
@@ -123,7 +128,10 @@ def test_main_function(
 @patch("src.strange_mca.main.argparse.ArgumentParser")
 @patch("src.strange_mca.main.load_dotenv")
 @patch("src.strange_mca.main.create_output_dir")
-def test_main_dry_run(mock_create_dir, mock_load_dotenv, mock_arg_parser):
+@patch("src.strange_mca.main.total_nodes")
+def test_main_dry_run(
+    mock_total_nodes, mock_create_dir, mock_load_dotenv, mock_arg_parser
+):
     """Test the main function with dry_run=True."""
     # Mock the argument parser
     mock_parser = MagicMock()
@@ -136,12 +144,15 @@ def test_main_dry_run(mock_create_dir, mock_load_dotenv, mock_arg_parser):
     mock_args.depth = 2
     mock_args.model = "gpt-3.5-turbo"
     mock_args.log_level = "info"
-    mock_args.all_logs = False
+    mock_args.local_logs_only = False
     mock_args.viz = False
     mock_args.dry_run = True  # Set dry_run to True
     mock_args.print_tree = False
     mock_args.print_details = False
     mock_parser.parse_args.return_value = mock_args
+
+    # Mock total_nodes
+    mock_total_nodes.return_value = 3
 
     # Mock the output directory
     mock_create_dir.return_value = "output/test_dir"

@@ -6,8 +6,8 @@ from src.strange_mca.run_strange_mca import run_strange_mca
 
 
 @patch("src.strange_mca.run_strange_mca.create_output_dir")
-@patch("src.strange_mca.run_strange_mca.create_agent_configs")
-@patch("src.strange_mca.run_strange_mca.visualize_agent_graph")
+@patch("src.strange_mca.run_strange_mca.total_nodes")
+@patch("src.strange_mca.run_strange_mca.visualize_agent_tree")
 @patch("src.strange_mca.run_strange_mca.create_execution_graph")
 @patch("src.strange_mca.run_strange_mca.run_execution_graph")
 @patch("src.strange_mca.run_strange_mca.json.dump")
@@ -19,20 +19,19 @@ def test_run_strange_mca(
     mock_json_dump,
     mock_run_graph,
     mock_create_graph,
-    mock_viz_agent_graph,
-    mock_create_configs,
+    mock_viz_agent_tree,
+    mock_total_nodes,
     mock_create_dir,
 ):
     """Test the run_strange_mca function."""
     # Mock the output directory
     mock_create_dir.return_value = "output/test_dir"
 
-    # Mock the agent configurations
-    mock_configs = {"L1N1": MagicMock(), "L2N1": MagicMock(), "L2N2": MagicMock()}
-    mock_create_configs.return_value = mock_configs
+    # Mock total_nodes
+    mock_total_nodes.return_value = 3
 
     # Skip visualization to avoid TypeError with MagicMock
-    mock_viz_agent_graph.return_value = "output/test_dir/agent_tree_nx.png"
+    mock_viz_agent_tree.return_value = "output/test_dir/agent_tree.png"
 
     # Mock the execution graph
     mock_graph = MagicMock()
@@ -50,8 +49,8 @@ def test_run_strange_mca(
         model="gpt-3.5-turbo",
         log_level="info",
         viz=True,
-        all_logs=False,
-        print_details=True,
+        local_logs_only=False,
+        print_details=False,
         domain_specific_instructions="Be concise.",
         strange_loop_count=1,
     )
@@ -59,8 +58,8 @@ def test_run_strange_mca(
     # Check that the output directory was created
     mock_create_dir.assert_called_once_with(2, 2, "gpt-3.5-turbo")
 
-    # Check that the agent configurations were created
-    mock_create_configs.assert_called_once_with(2, 2)
+    # Check that total_nodes was called
+    mock_total_nodes.assert_called_once_with(2, 2)
 
     # Check that the execution graph was created
     mock_create_graph.assert_called_once_with(
@@ -77,7 +76,7 @@ def test_run_strange_mca(
         execution_graph=mock_graph,
         task="Test task",
         log_level="info",
-        only_local_logs=True,
+        only_local_logs=False,
         langgraph_viz_dir=None,
     )
 
@@ -89,8 +88,8 @@ def test_run_strange_mca(
 
 
 @patch("src.strange_mca.run_strange_mca.create_output_dir")
-@patch("src.strange_mca.run_strange_mca.create_agent_configs")
-@patch("src.strange_mca.run_strange_mca.visualize_agent_graph")
+@patch("src.strange_mca.run_strange_mca.total_nodes")
+@patch("src.strange_mca.run_strange_mca.visualize_agent_tree")
 @patch("src.strange_mca.run_strange_mca.create_execution_graph")
 @patch("src.strange_mca.run_strange_mca.visualize_langgraph")
 @patch("src.strange_mca.run_strange_mca.run_execution_graph")
@@ -104,20 +103,19 @@ def test_run_strange_mca_with_viz(
     mock_run_graph,
     mock_viz_langgraph,
     mock_create_graph,
-    mock_viz_agent_graph,
-    mock_create_configs,
+    mock_viz_agent_tree,
+    mock_total_nodes,
     mock_create_dir,
 ):
     """Test the run_strange_mca function with visualization enabled."""
     # Mock the output directory
     mock_create_dir.return_value = "output/test_dir"
 
-    # Mock the agent configurations
-    mock_configs = {"L1N1": MagicMock(), "L2N1": MagicMock(), "L2N2": MagicMock()}
-    mock_create_configs.return_value = mock_configs
+    # Mock total_nodes
+    mock_total_nodes.return_value = 3
 
-    # Mock the agent graph visualization
-    mock_viz_agent_graph.return_value = "output/test_dir/agent_tree_nx.png"
+    # Mock the agent tree visualization
+    mock_viz_agent_tree.return_value = "output/test_dir/agent_tree.png"
 
     # Mock the execution graph
     mock_graph = MagicMock()
@@ -132,19 +130,19 @@ def test_run_strange_mca_with_viz(
         task="Test task", child_per_parent=2, depth=2, model="gpt-3.5-turbo", viz=True
     )
 
-    # Check that the agent graph visualization was created with ANY for the output_path
-    # This avoids issues with path joining in the test
-    mock_viz_agent_graph.assert_called_once()
-    args, kwargs = mock_viz_agent_graph.call_args
-    assert args[0] == mock_configs
+    # Check that the agent tree visualization was created
+    mock_viz_agent_tree.assert_called_once()
+    args, kwargs = mock_viz_agent_tree.call_args
+    assert kwargs["cpp"] == 2
+    assert kwargs["depth"] == 2
     assert kwargs["format"] == "png"
 
     # Check that the LangGraph visualization was created
-    mock_viz_langgraph.assert_called_once_with(mock_graph, "output/test_dir")
+    mock_viz_langgraph.assert_called_once_with(mock_graph, "output/test_dir", 2, 2)
 
 
 @patch("src.strange_mca.run_strange_mca.create_output_dir")
-@patch("src.strange_mca.run_strange_mca.create_agent_configs")
+@patch("src.strange_mca.run_strange_mca.total_nodes")
 @patch("src.strange_mca.run_strange_mca.create_execution_graph")
 @patch("src.strange_mca.run_strange_mca.run_execution_graph")
 @patch("src.strange_mca.run_strange_mca.json.dump")
@@ -156,13 +154,12 @@ def test_run_strange_mca_with_custom_output_dir(
     mock_json_dump,
     mock_run_graph,
     mock_create_graph,
-    mock_create_configs,
+    mock_total_nodes,
     mock_create_dir,
 ):
     """Test the run_strange_mca function with a custom output directory."""
-    # Mock the agent configurations
-    mock_configs = {"L1N1": MagicMock(), "L2N1": MagicMock(), "L2N2": MagicMock()}
-    mock_create_configs.return_value = mock_configs
+    # Mock total_nodes
+    mock_total_nodes.return_value = 3
 
     # Mock the execution graph
     mock_graph = MagicMock()

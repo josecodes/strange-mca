@@ -4,26 +4,127 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.strange_mca.graph import State, create_execution_graph, run_execution_graph
+from src.strange_mca.graph import (
+    State,
+    count_nodes_at_level,
+    create_execution_graph,
+    get_children,
+    is_leaf,
+    is_root,
+    make_node_name,
+    parse_node_name,
+    run_execution_graph,
+    total_nodes,
+)
+
+# =============================================================================
+# Tree Helper Function Tests
+# =============================================================================
+
+
+def test_parse_node_name():
+    """Test parsing node names."""
+    assert parse_node_name("L1N1") == (1, 1)
+    assert parse_node_name("L2N3") == (2, 3)
+    assert parse_node_name("L3N7") == (3, 7)
+    assert parse_node_name("L10N100") == (10, 100)
+
+
+def test_make_node_name():
+    """Test making node names."""
+    assert make_node_name(1, 1) == "L1N1"
+    assert make_node_name(2, 3) == "L2N3"
+    assert make_node_name(3, 7) == "L3N7"
+
+
+def test_get_children():
+    """Test getting children of a node."""
+    # Root with 2 children per parent, depth 3
+    children = get_children("L1N1", cpp=2, depth=3)
+    assert children == ["L2N1", "L2N2"]
+
+    # L2N1 with 2 children per parent, depth 3
+    children = get_children("L2N1", cpp=2, depth=3)
+    assert children == ["L3N1", "L3N2"]
+
+    # L2N2 with 2 children per parent, depth 3
+    children = get_children("L2N2", cpp=2, depth=3)
+    assert children == ["L3N3", "L3N4"]
+
+    # Leaf node (no children)
+    children = get_children("L3N1", cpp=2, depth=3)
+    assert children == []
+
+    # Root with 3 children per parent
+    children = get_children("L1N1", cpp=3, depth=2)
+    assert children == ["L2N1", "L2N2", "L2N3"]
+
+
+def test_is_leaf():
+    """Test leaf node detection."""
+    assert is_leaf(level=3, depth=3) is True
+    assert is_leaf(level=2, depth=3) is False
+    assert is_leaf(level=1, depth=3) is False
+    assert is_leaf(level=1, depth=1) is True
+
+
+def test_is_root():
+    """Test root node detection."""
+    assert is_root(level=1) is True
+    assert is_root(level=2) is False
+    assert is_root(level=3) is False
+
+
+def test_count_nodes_at_level():
+    """Test counting nodes at each level."""
+    # cpp=2
+    assert count_nodes_at_level(level=1, cpp=2) == 1
+    assert count_nodes_at_level(level=2, cpp=2) == 2
+    assert count_nodes_at_level(level=3, cpp=2) == 4
+
+    # cpp=3
+    assert count_nodes_at_level(level=1, cpp=3) == 1
+    assert count_nodes_at_level(level=2, cpp=3) == 3
+    assert count_nodes_at_level(level=3, cpp=3) == 9
+
+
+def test_total_nodes():
+    """Test total node count."""
+    # cpp=2, depth=2: 1 + 2 = 3
+    assert total_nodes(cpp=2, depth=2) == 3
+
+    # cpp=2, depth=3: 1 + 2 + 4 = 7
+    assert total_nodes(cpp=2, depth=3) == 7
+
+    # cpp=3, depth=2: 1 + 3 = 4
+    assert total_nodes(cpp=3, depth=2) == 4
+
+    # cpp=3, depth=3: 1 + 3 + 9 = 13
+    assert total_nodes(cpp=3, depth=3) == 13
+
+
+# =============================================================================
+# State Tests
+# =============================================================================
 
 
 def test_state_type():
     """Test the State type."""
-    # Create a valid State
-    state = State(
-        original_task="Test task",
-        nodes={"L1N1_down": {"task": "Test task"}},
-        current_node="L1N1_down",
-        final_response="",
-        strange_loops=[],
-    )
+    # Create a valid State (depth/cpp are build-time constants, not in state)
+    state: State = {
+        "task": "Test task",
+        "original_task": "Test task",
+        "response": "",
+    }
 
     # Check that the state has the expected keys
+    assert "task" in state
     assert "original_task" in state
-    assert "nodes" in state
-    assert "current_node" in state
-    assert "final_response" in state
-    assert "strange_loops" in state
+
+
+# =============================================================================
+# Graph Creation Tests
+# =============================================================================
 
 
 @pytest.mark.skip(reason="Requires LangGraph and makes actual API calls")
@@ -39,15 +140,136 @@ def test_create_execution_graph():
     assert hasattr(graph, "invoke")
 
 
-@patch("src.strange_mca.graph.create_execution_graph")
+@patch("src.strange_mca.graph.Agent")
+def test_create_execution_graph_structure(mock_agent_class):
+    """Test the structure creation in create_execution_graph."""
+    # Mock the Agent class
+    mock_agent = MagicMock()
+    mock_agent.run.return_value = "Test response"
+    mock_agent_class.return_value = mock_agent
+
+    # Create the graph
+    graph = create_execution_graph(
+        child_per_parent=2, depth=2, model_name="gpt-3.5-turbo"
+    )
+
+    # Check that the graph was created
+    assert graph is not None
+
+    # Check that Agent was instantiated (3 agents for cpp=2, depth=2)
+    assert mock_agent_class.call_count == 3
+
+
+@patch("src.strange_mca.graph.Agent")
+def test_create_execution_graph_depth_1_with_strange_loop(mock_agent_class):
+    """Test that depth=1 (single node) correctly processes strange loops."""
+    # Mock the Agent class
+    mock_agent = MagicMock()
+    # First call returns task response, second call returns strange loop response
+    # Use the format expected by parse_strange_loop_response
+    strange_loop_response = """Analysis of response...
+
+Final Response:
+**********
+Refined response after strange loop
+**********"""
+    mock_agent.run.side_effect = [
+        "Initial task response",
+        strange_loop_response,
+    ]
+    mock_agent_class.return_value = mock_agent
+
+    # Create the graph with depth=1 and strange_loop_count=1
+    graph = create_execution_graph(
+        child_per_parent=2,
+        depth=1,
+        model_name="gpt-3.5-turbo",
+        strange_loop_count=1,
+    )
+
+    # Check that the graph was created
+    assert graph is not None
+
+    # Check that only 1 Agent was instantiated (single node tree)
+    assert mock_agent_class.call_count == 1
+
+    # Invoke the graph
+    result = graph.invoke({"task": "Test task", "original_task": "Test task"})
+
+    # Check that strange loop was processed
+    assert "final_response" in result
+    assert "strange_loops" in result
+    assert len(result["strange_loops"]) == 1
+    # The response should be the parsed strange loop response
+    assert result["final_response"] == "Refined response after strange loop"
+
+
+@patch("src.strange_mca.graph.Agent")
+def test_create_execution_graph_depth_1_with_domain_instructions(mock_agent_class):
+    """Test that depth=1 correctly processes domain instructions."""
+    # Mock the Agent class
+    mock_agent = MagicMock()
+    mock_agent.run.side_effect = [
+        "Initial task response",
+        "<response>Response with domain instructions</response>",
+    ]
+    mock_agent_class.return_value = mock_agent
+
+    # Create the graph with depth=1 and domain instructions (no explicit strange_loop_count)
+    graph = create_execution_graph(
+        child_per_parent=2,
+        depth=1,
+        model_name="gpt-3.5-turbo",
+        domain_specific_instructions="Follow these domain rules",
+        strange_loop_count=0,
+    )
+
+    # Invoke the graph
+    result = graph.invoke({"task": "Test task", "original_task": "Test task"})
+
+    # Domain instructions should trigger one strange loop iteration
+    assert "final_response" in result
+    assert "strange_loops" in result
+    assert len(result["strange_loops"]) == 1
+
+
+@patch("src.strange_mca.graph.Agent")
+def test_create_execution_graph_depth_1_no_strange_loop(mock_agent_class):
+    """Test that depth=1 with no strange loops still produces final_response."""
+    # Mock the Agent class
+    mock_agent = MagicMock()
+    mock_agent.run.return_value = "Simple task response"
+    mock_agent_class.return_value = mock_agent
+
+    # Create the graph with depth=1 and NO strange loops or domain instructions
+    graph = create_execution_graph(
+        child_per_parent=2,
+        depth=1,
+        model_name="gpt-3.5-turbo",
+        domain_specific_instructions="",
+        strange_loop_count=0,
+    )
+
+    # Invoke the graph
+    result = graph.invoke({"task": "Test task", "original_task": "Test task"})
+
+    # Should have final_response but NO strange_loops
+    assert "final_response" in result
+    assert result["final_response"] == "Simple task response"
+    assert "strange_loops" not in result
+    # Agent should only be called once (just the task execution)
+    assert mock_agent.run.call_count == 1
+
+
 @patch("src.strange_mca.graph.setup_detailed_logging")
-def test_run_execution_graph_setup(mock_setup_logging, mock_create_graph):
+def test_run_execution_graph_setup(mock_setup_logging):
     """Test the setup phase of run_execution_graph."""
     # Create a mock graph
     mock_graph = MagicMock()
-    mock_graph.get_graph.return_value.nodes = ["L1N1_down"]
-    mock_graph.invoke.return_value = {"final_response": "Test response"}
-    mock_create_graph.return_value = mock_graph
+    mock_graph.invoke.return_value = {
+        "response": "Test response",
+        "final_response": "Test response",
+    }
 
     # Run the function
     result = run_execution_graph(
@@ -66,36 +288,3 @@ def test_run_execution_graph_setup(mock_setup_logging, mock_create_graph):
     # Check that the result contains the expected keys
     assert "final_response" in result
     assert result["final_response"] == "Test response"
-
-
-@patch("src.strange_mca.graph.create_agent_tree")
-def test_create_execution_graph_structure(mock_create_agent_tree):
-    """Test the structure creation in create_execution_graph."""
-    # Create a mock agent tree
-    mock_tree = MagicMock()
-    mock_tree.get_root.return_value = "L1N1"
-    mock_tree.perform_down_traversal.return_value = ["L1N1", "L2N1", "L2N2"]
-    mock_tree.perform_up_traversal.return_value = ["L2N1", "L2N2", "L1N1"]
-    mock_tree.mca_graph.nodes.return_value = ["L1N1", "L2N1", "L2N2"]
-    mock_create_agent_tree.return_value = mock_tree
-
-    # Mock the StateGraph
-    with patch("src.strange_mca.graph.StateGraph") as mock_state_graph:
-        # Mock the graph builder
-        mock_builder = MagicMock()
-        mock_state_graph.return_value = mock_builder
-
-        # Call the function
-        create_execution_graph(child_per_parent=2, depth=2, model_name="gpt-3.5-turbo")
-
-        # Check that the agent tree was created
-        mock_create_agent_tree.assert_called_once_with(2, 2)
-
-        # Check that the graph builder was created
-        mock_state_graph.assert_called_once()
-
-        # Check that the entry point was set
-        mock_builder.set_entry_point.assert_called_once_with("L1N1_down")
-
-        # Check that the graph was compiled
-        mock_builder.compile.assert_called_once()
