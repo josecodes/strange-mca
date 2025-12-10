@@ -233,6 +233,34 @@ def test_create_execution_graph_depth_1_with_domain_instructions(mock_agent_clas
     assert len(result["strange_loops"]) == 1
 
 
+@patch("src.strange_mca.graph.Agent")
+def test_create_execution_graph_depth_1_no_strange_loop(mock_agent_class):
+    """Test that depth=1 with no strange loops still produces final_response."""
+    # Mock the Agent class
+    mock_agent = MagicMock()
+    mock_agent.run.return_value = "Simple task response"
+    mock_agent_class.return_value = mock_agent
+
+    # Create the graph with depth=1 and NO strange loops or domain instructions
+    graph = create_execution_graph(
+        child_per_parent=2,
+        depth=1,
+        model_name="gpt-3.5-turbo",
+        domain_specific_instructions="",
+        strange_loop_count=0,
+    )
+
+    # Invoke the graph
+    result = graph.invoke({"task": "Test task", "original_task": "Test task"})
+
+    # Should have final_response but NO strange_loops
+    assert "final_response" in result
+    assert result["final_response"] == "Simple task response"
+    assert "strange_loops" not in result
+    # Agent should only be called once (just the task execution)
+    assert mock_agent.run.call_count == 1
+
+
 @patch("src.strange_mca.graph.setup_detailed_logging")
 def test_run_execution_graph_setup(mock_setup_logging):
     """Test the setup phase of run_execution_graph."""

@@ -165,6 +165,53 @@ class State(TypedDict, total=False):
 # =============================================================================
 
 
+def _apply_strange_loop(
+    agent,
+    response: str,
+    original_task: str,
+    strange_loop_count: int,
+    domain_instructions: str,
+) -> tuple[str, list[dict[str, str]] | None]:
+    """Apply strange loop processing to a response.
+
+    Args:
+        agent: The agent to use for strange loop iterations.
+        response: The current response to refine.
+        original_task: The original task for context.
+        strange_loop_count: Number of strange loop iterations.
+        domain_instructions: Domain-specific instructions for the last iteration.
+
+    Returns:
+        Tuple of (final_response, strange_loops_list or None if no loops run).
+    """
+    local_count = strange_loop_count
+    if domain_instructions:
+        local_count += 1
+
+    if local_count == 0:
+        return response, None
+
+    loops = []
+    for i in range(local_count):
+        # Apply domain instructions on last iteration
+        if i == local_count - 1:
+            loop_prompt = create_strange_loop_prompt(
+                original_task,
+                response,
+                domain_instructions,
+            )
+        else:
+            loop_prompt = create_strange_loop_prompt(
+                original_task,
+                response,
+            )
+        loop_response = agent.run(task=loop_prompt)
+        loops.append({"prompt": loop_prompt, "response": loop_response})
+        response = parse_strange_loop_response(loop_response)
+
+    return response, loops
+
+
 def _parse_subtask_for_child(decomposition_response: str, child_name: str) -> str:
     """Extract subtask for a specific child from decomposition response.
 
@@ -250,37 +297,20 @@ def create_agent_subgraph(
     elif is_leaf_node and is_root_node:
         # Root that is also a leaf (depth=1): needs strange loop processing
         def up_node_root_leaf(state: State) -> dict[str, Any]:
-            # Response already set by down_node, just apply strange loop
             response = state["response"]
-            result: dict[str, Any] = {"response": response}
+            original_task = state.get("original_task", state["task"])
 
-            # Strange loop processing (same as non-leaf root)
-            local_strange_loop_count = strange_loop_count
-            if domain_instructions:
-                local_strange_loop_count += 1
+            # Apply strange loop processing
+            final_response, loops = _apply_strange_loop(
+                agent, response, original_task, strange_loop_count, domain_instructions
+            )
 
-            if local_strange_loop_count > 0:
-                loops = []
-                for i in range(local_strange_loop_count):
-                    # Apply domain instructions on last iteration
-                    if i == local_strange_loop_count - 1:
-                        loop_prompt = create_strange_loop_prompt(
-                            state.get("original_task", state["task"]),
-                            response,
-                            domain_instructions,
-                        )
-                    else:
-                        loop_prompt = create_strange_loop_prompt(
-                            state.get("original_task", state["task"]),
-                            response,
-                        )
-                    loop_response = agent.run(task=loop_prompt)
-                    loops.append({"prompt": loop_prompt, "response": loop_response})
-                    response = parse_strange_loop_response(loop_response)
-
+            result: dict[str, Any] = {
+                "response": response,
+                "final_response": final_response,
+            }
+            if loops:
                 result["strange_loops"] = loops
-
-            result["final_response"] = response
             return result
 
         builder.add_node("up", up_node_root_leaf)
@@ -358,32 +388,17 @@ def create_agent_subgraph(
 
             # Strange loop at root
             if is_root_node:
-                local_strange_loop_count = strange_loop_count
-                if domain_instructions:
-                    local_strange_loop_count += 1
-
-                if local_strange_loop_count > 0:
-                    loops = []
-                    for i in range(local_strange_loop_count):
-                        # Apply domain instructions on last iteration
-                        if i == local_strange_loop_count - 1:
-                            loop_prompt = create_strange_loop_prompt(
-                                state.get("original_task", state["task"]),
-                                response,
-                                domain_instructions,
-                            )
-                        else:
-                            loop_prompt = create_strange_loop_prompt(
-                                state.get("original_task", state["task"]),
-                                response,
-                            )
-                        loop_response = agent.run(task=loop_prompt)
-                        loops.append({"prompt": loop_prompt, "response": loop_response})
-                        response = parse_strange_loop_response(loop_response)
-
+                original_task = state.get("original_task", state["task"])
+                final_response, loops = _apply_strange_loop(
+                    agent,
+                    response,
+                    original_task,
+                    strange_loop_count,
+                    domain_instructions,
+                )
+                result["final_response"] = final_response
+                if loops:
                     result["strange_loops"] = loops
-
-                result["final_response"] = response
 
             return result
 
