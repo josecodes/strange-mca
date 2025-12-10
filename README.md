@@ -14,18 +14,36 @@ Probably the most fun thing to do with it right now, besides asking ambigious or
 
 ## High Level Architecture
 
-The `AgentTree` class in agents.py represents the conceptual MCA structure of the system. This uses a networkx directed graph at its core.
+The system uses a **nested LangGraph subgraph** architecture where the agent tree structure is directly embedded in the execution graph. Each agent is represented as a self-contained subgraph with:
+- A **down node** for task decomposition (non-leaf) or execution (leaf)
+- **Child subgraphs** for each child agent
+- An **up node** for synthesizing children's responses
 
-Separately, the `exectution_graph` in graph.py represents the execution graph for processing to propogate through the system. This uses LangGraph. 
+```
+┌─────────────────────────────────────────────────────────────┐
+│  L1N1 (root subgraph)                                       │
+│  ┌─────────┐                                                │
+│  │  down   │  (decompose task into subtasks)                │
+│  └────┬────┘                                                │
+│       │                                                     │
+│  ┌────┴─────────────────────┐                               │
+│  │                          │                               │
+│  ▼                          ▼                               │
+│ ┌────────────────────┐    ┌────────────────────┐            │
+│ │ L2N1 (subgraph)    │    │ L2N2 (subgraph)    │            │
+│ │ ┌────┐             │    │ ┌────┐             │            │
+│ │ │down│ (execute)   │    │ │down│ (execute)   │            │
+│ │ └────┘             │    │ └────┘             │            │
+│ └────────────────────┘    └────────────────────┘            │
+│       │                          │                          │
+│       └───────────┬──────────────┘                          │
+│              ┌────┴───┐                                     │
+│              │   up   │  (synthesize + strange loop)        │
+│              └────────┘                                     │
+└─────────────────────────────────────────────────────────────┘
+```
 
-Below are an image of the AgentTree on the left and the LangGraph execution graph on the right.
-
-<div style="display: flex; justify-content: space-between;">
-  <img src="assets/agent_tree_nx.png" alt="Agent Tree" width="45%">
-  <img src="assets/execution_graph_lg.png" alt="Execution Graph" width="45%">
-</div>
-
-Tasks are decomposed down the AgentTree and responses are synthesized upwards. The execution graph on the right represents the flattened bfs downward and upward traversal of the tree on the left. The graphs were kept separate to allow for full control of execution traversal and to simplify debugging. If scale, concurrency, and/or dynamic routing are desired in the future, it will make sense to move over to LangGraph entirely.
+Tasks are decomposed downward through the tree and responses are synthesized upward. The strange loop self-reflection occurs at the root node's up pass.
 
 ## Future Ideas and Improvements
 
@@ -47,11 +65,11 @@ This system mainly serves as a conceptual playground to model MCA and StrangeLoo
 
 ### Tech improvements
 * Will add local LLM capability, MLX on my mac. An MCA system of agents running locally just feels right.
-* Should probably consolidate in to one graph, likely LangGraph in the future.
-* Keeping the heirarchy below 3 levels seems about right. Things get slow and wonky at four levels or more. Similar to human orgs. :) It would be interesting to play at larger scales though. 
+* ~~Should probably consolidate in to one graph, likely LangGraph in the future.~~ ✅ Done! The system now uses a unified nested LangGraph subgraph architecture.
+* Keeping the hierarchy below 3 levels seems about right. Things get slow and wonky at four levels or more. Similar to human orgs. :) It would be interesting to play at larger scales though.
 * Multimodal would be interesting. But there is something elegant about the simplicity about text input/outputs. Very unixy.
 * Logs could get cleaned up.
-* Test were entirely generated with Cursor, and lightly inspected. It serves as some baseline measure of testing, but they need human attention.
+* Tests were entirely generated with Cursor, and lightly inspected. It serves as some baseline measure of testing, but they need human attention.
 * The codebase has some slop (not entirely Cursor's fault.) Not intended to be a production system, but could use some more review for readability and avoiding problems down the line. More info in the "Note on AI Code Assistant" section.
 * I should move these issues in to GitHub Issues. (self-reflective issue?)
 
@@ -204,8 +222,8 @@ while not done:
 - `src/strange_mca/`: Core implementation of the strange-mca system
   - `main.py`: Command-line interface and main execution script
   - `run_strange_mca.py`: Programmatic API for running the system
-  - `graph.py`: Implementation of the execution graph using LangGraph
-  - `agents.py`: Agent definitions and tree structure
+  - `graph.py`: Nested subgraph architecture, tree helpers, and execution logic
+  - `agents.py`: Agent and AgentConfig definitions
   - `prompts.py`: Prompt templates for various stages of processing
   - `visualization.py`: Tools for visualizing the agent tree and execution
   - `logging_utils.py`: Utilities for detailed logging
