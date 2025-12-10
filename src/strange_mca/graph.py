@@ -244,9 +244,48 @@ def create_agent_subgraph(
 
     builder.add_node("down", down_node)
 
-    if is_leaf_node:
-        # Leaf: down -> END (response already set)
+    if is_leaf_node and not is_root_node:
+        # Non-root leaf: down -> END (response already set)
         builder.add_edge("down", END)
+    elif is_leaf_node and is_root_node:
+        # Root that is also a leaf (depth=1): needs strange loop processing
+        def up_node_root_leaf(state: State) -> dict[str, Any]:
+            # Response already set by down_node, just apply strange loop
+            response = state["response"]
+            result: dict[str, Any] = {"response": response}
+
+            # Strange loop processing (same as non-leaf root)
+            local_strange_loop_count = strange_loop_count
+            if domain_instructions:
+                local_strange_loop_count += 1
+
+            if local_strange_loop_count > 0:
+                loops = []
+                for i in range(local_strange_loop_count):
+                    # Apply domain instructions on last iteration
+                    if i == local_strange_loop_count - 1:
+                        loop_prompt = create_strange_loop_prompt(
+                            state.get("original_task", state["task"]),
+                            response,
+                            domain_instructions,
+                        )
+                    else:
+                        loop_prompt = create_strange_loop_prompt(
+                            state.get("original_task", state["task"]),
+                            response,
+                        )
+                    loop_response = agent.run(task=loop_prompt)
+                    loops.append({"prompt": loop_prompt, "response": loop_response})
+                    response = parse_strange_loop_response(loop_response)
+
+                result["strange_loops"] = loops
+
+            result["final_response"] = response
+            return result
+
+        builder.add_node("up", up_node_root_leaf)
+        builder.add_edge("down", "up")
+        builder.add_edge("up", END)
     else:
         # Non-leaf: down -> children (sequential) -> up
 

@@ -160,6 +160,79 @@ def test_create_execution_graph_structure(mock_agent_class):
     assert mock_agent_class.call_count == 3
 
 
+@patch("src.strange_mca.graph.Agent")
+def test_create_execution_graph_depth_1_with_strange_loop(mock_agent_class):
+    """Test that depth=1 (single node) correctly processes strange loops."""
+    # Mock the Agent class
+    mock_agent = MagicMock()
+    # First call returns task response, second call returns strange loop response
+    # Use the format expected by parse_strange_loop_response
+    strange_loop_response = """Analysis of response...
+
+Final Response:
+**********
+Refined response after strange loop
+**********"""
+    mock_agent.run.side_effect = [
+        "Initial task response",
+        strange_loop_response,
+    ]
+    mock_agent_class.return_value = mock_agent
+
+    # Create the graph with depth=1 and strange_loop_count=1
+    graph = create_execution_graph(
+        child_per_parent=2,
+        depth=1,
+        model_name="gpt-3.5-turbo",
+        strange_loop_count=1,
+    )
+
+    # Check that the graph was created
+    assert graph is not None
+
+    # Check that only 1 Agent was instantiated (single node tree)
+    assert mock_agent_class.call_count == 1
+
+    # Invoke the graph
+    result = graph.invoke({"task": "Test task", "original_task": "Test task"})
+
+    # Check that strange loop was processed
+    assert "final_response" in result
+    assert "strange_loops" in result
+    assert len(result["strange_loops"]) == 1
+    # The response should be the parsed strange loop response
+    assert result["final_response"] == "Refined response after strange loop"
+
+
+@patch("src.strange_mca.graph.Agent")
+def test_create_execution_graph_depth_1_with_domain_instructions(mock_agent_class):
+    """Test that depth=1 correctly processes domain instructions."""
+    # Mock the Agent class
+    mock_agent = MagicMock()
+    mock_agent.run.side_effect = [
+        "Initial task response",
+        "<response>Response with domain instructions</response>",
+    ]
+    mock_agent_class.return_value = mock_agent
+
+    # Create the graph with depth=1 and domain instructions (no explicit strange_loop_count)
+    graph = create_execution_graph(
+        child_per_parent=2,
+        depth=1,
+        model_name="gpt-3.5-turbo",
+        domain_specific_instructions="Follow these domain rules",
+        strange_loop_count=0,
+    )
+
+    # Invoke the graph
+    result = graph.invoke({"task": "Test task", "original_task": "Test task"})
+
+    # Domain instructions should trigger one strange loop iteration
+    assert "final_response" in result
+    assert "strange_loops" in result
+    assert len(result["strange_loops"]) == 1
+
+
 @patch("src.strange_mca.graph.setup_detailed_logging")
 def test_run_execution_graph_setup(mock_setup_logging):
     """Test the setup phase of run_execution_graph."""
