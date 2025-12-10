@@ -15,11 +15,10 @@ import os
 
 from dotenv import load_dotenv
 
-from src.strange_mca.graph import create_execution_graph, run_execution_graph
+from src.strange_mca.graph import create_execution_graph, run_execution_graph, total_nodes
 from src.strange_mca.visualization import (
-    print_agent_details,
     print_agent_tree,
-    visualize_agent_graph,
+    visualize_agent_tree,
     visualize_langgraph,
 )
 
@@ -141,35 +140,20 @@ def main():
     logger.info(f"  Output directory: {output_dir}")
 
     # Calculate the total number of agents
-    total_agents = sum(
-        args.child_per_parent ** (i - 1) for i in range(1, args.depth + 1)
-    )
-    logger.info(f"Total agents: {total_agents}")
+    num_agents = total_nodes(args.child_per_parent, args.depth)
+    logger.info(f"Total agents: {num_agents}")
 
     # Print the agent tree if requested
     if args.print_tree:
-        from src.strange_mca.agents import create_agent_configs
-
-        agent_configs = create_agent_configs(args.child_per_parent, args.depth)
-        print_agent_tree(agent_configs)
+        print_agent_tree(args.child_per_parent, args.depth)
         print()
 
-    # Print agent details if requested
-    if args.print_details:
-        from src.strange_mca.agents import create_agent_configs
-
-        agent_configs = create_agent_configs(args.child_per_parent, args.depth)
-        print_agent_details(agent_configs)
-        print()
-
-    # Visualize the agent graph if requested
+    # Visualize the agent tree if requested
     if args.viz:
-        from src.strange_mca.agents import create_agent_configs
-
-        agent_configs = create_agent_configs(args.child_per_parent, args.depth)
-        output_file = visualize_agent_graph(
-            agent_configs,
-            output_path=os.path.join(output_dir, "agent_tree_nx"),
+        output_file = visualize_agent_tree(
+            cpp=args.child_per_parent,
+            depth=args.depth,
+            output_path=os.path.join(output_dir, "agent_tree"),
             format="png",
         )
         if output_file:
@@ -193,7 +177,7 @@ def main():
 
     # Generate LangGraph visualization if requested
     if args.viz:
-        visualize_langgraph(graph, output_dir)
+        visualize_langgraph(graph, output_dir, args.child_per_parent, args.depth)
 
     # Run the execution graph
     logger.info("Running execution graph...")
@@ -217,15 +201,6 @@ def main():
         print("=" * 80)
         # Create a DEEP copy of the result to avoid modifying the original
         state_copy = copy.deepcopy(result)
-
-        #             state_copy["nodes"][node_name]["strange_loops"] = [
-        #                 {
-        #                     "prompt": loop["prompt"],
-        #                     "response": loop["response"][:500] + "... [truncated]"
-        #                 }
-
-        # # Pretty print the state
-        # pp = pprint.PrettyPrinter(indent=2, width=100)
         print(json.dumps(state_copy, indent=2))
         print("=" * 80)
 

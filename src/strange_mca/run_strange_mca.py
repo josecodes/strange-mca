@@ -13,10 +13,9 @@ from typing import Any, Optional
 
 from dotenv import load_dotenv
 
-from src.strange_mca.agents import create_agent_configs
-from src.strange_mca.graph import create_execution_graph, run_execution_graph
+from src.strange_mca.graph import create_execution_graph, run_execution_graph, total_nodes
 from src.strange_mca.main import create_output_dir
-from src.strange_mca.visualization import visualize_agent_graph, visualize_langgraph
+from src.strange_mca.visualization import visualize_agent_tree, visualize_langgraph
 
 # Load environment variables from .env file
 load_dotenv()
@@ -81,15 +80,16 @@ def run_strange_mca(
     logger.info(f"  Model: {model}")
     logger.info(f"  Output directory: {output_dir}")
 
-    # Create agent configurations
-    agent_configs = create_agent_configs(child_per_parent, depth)
-    logger.info(f"Total agents: {len(agent_configs)}")
+    # Calculate total agents
+    num_agents = total_nodes(child_per_parent, depth)
+    logger.info(f"Total agents: {num_agents}")
 
-    # Visualize the agent graph if requested
+    # Visualize the agent tree if requested
     if viz:
-        output_file = visualize_agent_graph(
-            agent_configs,
-            output_path=os.path.join(output_dir, "agent_tree_nx"),
+        output_file = visualize_agent_tree(
+            cpp=child_per_parent,
+            depth=depth,
+            output_path=os.path.join(output_dir, "agent_tree"),
             format="png",
         )
         if output_file:
@@ -108,7 +108,7 @@ def run_strange_mca(
 
     # Generate LangGraph visualization if requested
     if viz:
-        visualize_langgraph(graph, output_dir)
+        visualize_langgraph(graph, output_dir, child_per_parent, depth)
 
     # Run the execution graph
     logger.info("Running execution graph...")
@@ -122,31 +122,12 @@ def run_strange_mca(
 
     # Print the final response
     logger.info("Graph execution completed")
-    # print("\nFinal Response:")
-    # print("=" * 80)
-    # print(result.get("final_response", "No final response generated"))
-    # print("=" * 80)
 
     if print_details:
         print("\nFull State:")
         print("=" * 80)
         # Create a DEEP copy of the result to avoid modifying the original
         state_copy = copy.deepcopy(result)
-
-        # Format nodes dictionary for better readability
-        if "nodes" in state_copy:
-            for node_name, node_data in state_copy["nodes"].items():
-                # Truncate long responses for display
-                if "response" in node_data and len(node_data["response"]) > 500:
-                    state_copy["nodes"][node_name]["response"] = (
-                        node_data["response"][:500] + "... [truncated]"
-                    )
-
-                # Truncate long tasks for display
-                if "task" in node_data and len(node_data["task"]) > 500:
-                    state_copy["nodes"][node_name]["task"] = (
-                        node_data["task"][:500] + "... [truncated]"
-                    )
 
         # Pretty print the state
         import pprint
@@ -159,14 +140,6 @@ def run_strange_mca(
     state_file = os.path.join(output_dir, "final_state.json")
     with open(state_file, "w") as f:
         json.dump(result, f, indent=2)
-    # print(f"Full state saved to: {state_file}")
-
-    # # Print execution summary
-    # print("\nExecution Summary:")
-    # print(f"Tree structure: {child_per_parent} children per parent, {depth} levels deep")
-    # print(f"Task: {task}")
-    # print(f"Model: {model}")
-    # print(f"Output saved to: {output_dir}")
 
     return result
 
