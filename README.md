@@ -47,31 +47,12 @@ Tasks are decomposed downward through the tree and responses are synthesized upw
 
 ## Future Ideas and Improvements
 
-This system mainly serves as a conceptual playground to model MCA and StrangeLoop in a multiagent system; this will be the focus, not building a production system or things like scale and performance. It may solve puzzles better than its non-MCA competitors one day; the current level of chess competition is about even and is about who can send an invalid response last, as you might expect. Future more powerful agents will make this a more interesting competition. 
+This system mainly serves as a conceptual playground to model MCA and StrangeLoop in a multiagent system; this will be the focus, not building a production system or things like scale and performance. It may solve puzzles better than its non-MCA competitors one day; the current level of chess competition is about even and is about who can send an invalid response last, as you might expect. Future more powerful agents will make this a more interesting competition.
 
-### MCA 
-* This version is very top down. Perhaps this is antithetical to an MCA, where each layer provides the potential for a new level of problem-solving/magic to emerge above it. Modeling probably starts at protein interaction networks (fuzzy, combinatoral logic) and goes up the causal emergence stack. See Chapter 4 Proteins and 5 Networks of Phillip Ball's "How Life Works" book for more ideas.
-* Basal cognition will be an interesting concept to play around with. In social groups, I think of culture as the basal cognition layer. Giving these agents cultural system prompts might be interesting.
-* Could be more intentional in levels bending the problem space of sublevels to meet its goals - a key aspect of MCA. Task-decomposition and response-synthesis functions result in weak multiscale layers. 
-* Agents could be set to different capabilities (ie LLM spec) at different levels.
-* Agents could be have a chat memory to help the system "learn" from good/bad moves.
-* This version is very static/rigid. Seems like dynamic routing and perhaps even structure will make sense.
-
-
-### Strange Loop Ideas
-* This is in a very basic form. I'll have to re-read Hofstadter's book to grasp it better but I believe part of the magic comes in hierarchical layers of the loop itself. Not sure what that means exactly, but it currently is only done at the top level.
-* It sometimes entirely replaces the response with its own view.
-* The domain_specific_instructions were an interesting tweak to get the games to run reliably but not sure it belongs in a strange loop logic.
-
-### Tech improvements
-* Will add local LLM capability, MLX on my mac. An MCA system of agents running locally just feels right.
-* ~~Should probably consolidate in to one graph, likely LangGraph in the future.~~ ✅ Done! The system now uses a unified nested LangGraph subgraph architecture.
-* Keeping the hierarchy below 3 levels seems about right. Things get slow and wonky at four levels or more. Similar to human orgs. :) It would be interesting to play at larger scales though.
-* Multimodal would be interesting. But there is something elegant about the simplicity about text input/outputs. Very unixy.
-* Logs could get cleaned up.
-* Tests were entirely generated with Cursor, and lightly inspected. It serves as some baseline measure of testing, but they need human attention.
-* The codebase has some slop (not entirely Cursor's fault.) Not intended to be a production system, but could use some more review for readability and avoiding problems down the line. More info in the "Note on AI Code Assistant" section.
-* I should move these issues in to GitHub Issues. (self-reflective issue?)
+See [GitHub Issues](https://github.com/josecodes/strange-mca/issues) for planned improvements, organized by label:
+- [`mca`](https://github.com/josecodes/strange-mca/labels/mca) - Multiscale Competency Architecture enhancements
+- [`strange-loop`](https://github.com/josecodes/strange-mca/labels/strange-loop) - Strange Loop self-reflection improvements
+- [`tech`](https://github.com/josecodes/strange-mca/labels/tech) - Technical improvements and maintenance
 
 
 ## Features
