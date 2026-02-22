@@ -1,18 +1,29 @@
 """Tests for the TextArena integration."""
 
+import importlib.util
 import os
-import sys
 from unittest.mock import patch
 
-# Add the examples/arena directory to the Python path
-sys.path.append(
-    os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples/arena")
-)
 
-from strangemca_textarena import StrangeMCAAgent
+def _import_strangemca_textarena():
+    """Import strangemca_textarena from examples/arena without modifying sys.path."""
+    module_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "examples",
+        "arena",
+        "strangemca_textarena.py",
+    )
+    spec = importlib.util.spec_from_file_location("strangemca_textarena", module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-@patch("strangemca_textarena.run_strange_mca")
+strangemca_textarena = _import_strangemca_textarena()
+StrangeMCAAgent = strangemca_textarena.StrangeMCAAgent
+
+
+@patch.object(strangemca_textarena, "run_strange_mca")
 def test_strangemca_agent_init(mock_run_strange_mca):
     """Test the initialization of the StrangeMCAAgent class."""
     agent = StrangeMCAAgent()
@@ -57,7 +68,7 @@ def test_strangemca_agent_init(mock_run_strange_mca):
     assert agent.strange_loop_count == 2
 
 
-@patch("strangemca_textarena.run_strange_mca")
+@patch.object(strangemca_textarena, "run_strange_mca")
 def test_strangemca_agent_call(mock_run_strange_mca):
     """Test the __call__ method of the StrangeMCAAgent class."""
     mock_run_strange_mca.return_value = {"final_response": "Test response"}
@@ -83,7 +94,7 @@ def test_strangemca_agent_call(mock_run_strange_mca):
     assert response == "Test response"
 
 
-@patch("strangemca_textarena.run_strange_mca")
+@patch.object(strangemca_textarena, "run_strange_mca")
 def test_strangemca_agent_with_template(mock_run_strange_mca):
     """Test the StrangeMCAAgent with a custom task template."""
     mock_run_strange_mca.return_value = {"final_response": "Paris"}

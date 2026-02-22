@@ -217,34 +217,6 @@ def create_signal_prompt(
     return "\n".join(parts)
 
 
-def create_signal_response_prompt(
-    task: str,
-    own_response: str,
-    parent_signal: str,
-    round_num: int,
-) -> str:
-    """Create a prompt for responding to a parent's downward signal.
-
-    Args:
-        task: The original task.
-        own_response: The agent's current response.
-        parent_signal: The signal from the parent.
-        round_num: Current round number.
-
-    Returns:
-        A prompt string.
-    """
-    return (
-        f"TASK: {task}\n\n"
-        f"YOUR CURRENT RESPONSE:\n{own_response}\n\n"
-        f"SIGNAL FROM YOUR COORDINATOR:\n{parent_signal}\n\n"
-        "Your coordinator has highlighted areas for attention. Consider whether "
-        "this signal reveals gaps in your analysis. You may adjust your response "
-        "or maintain it if you believe your current analysis is stronger.\n\n"
-        "Provide your response."
-    )
-
-
 def create_strange_loop_prompt(
     original_task: str, tentative_response: str, domain_specific_instructions: str = ""
 ) -> str:
@@ -308,7 +280,10 @@ def parse_strange_loop_response(response: str) -> str:
     if not response:
         return ""
 
-    # Try to find the final response section using regex pattern matching
+    # Both regex and fallback extract the FIRST "Final Response:" section.
+    # The regex uses a non-greedy match (.*?) which captures the first occurrence.
+    # The fallback's line-by-line parser breaks out of the loop after finding the
+    # first asterisk-delimited block following "Final Response:", yielding the same result.
     pattern = r"Final Response:\s*\n\*{10,}\s*\n(.*?)\n\*{10,}"
     match = re.search(pattern, response, re.DOTALL)
     if match:

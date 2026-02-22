@@ -155,3 +155,98 @@ def test_run_strange_mca_with_custom_output_dir(
 
     mock_create_dir.assert_not_called()
     assert mock_json_dump.call_count == 2
+
+
+# =============================================================================
+# build_mca_report Edge Case Tests
+# =============================================================================
+
+
+def test_build_mca_report_empty_history():
+    """Test build_mca_report with empty agent history."""
+    result = {
+        "agent_history": {},
+        "converged": False,
+        "convergence_scores": [],
+        "final_response": "",
+    }
+    report = build_mca_report(result, "Test task", {"cpp": 2, "depth": 2})
+
+    assert len(report["rounds"]) == 0
+    assert report["summary_metrics"]["total_llm_calls"] == 0
+    assert report["summary_metrics"]["lateral_revision_rate"] == 0.0
+    assert report["convergence"]["rounds_used"] == 0
+
+
+def test_build_mca_report_with_strange_loops():
+    """Test that strange_loops are included in report when present."""
+    result = {
+        "agent_history": {"L1N1": [{"response": "synth"}]},
+        "converged": True,
+        "convergence_scores": [],
+        "final_response": "final",
+        "strange_loops": [{"prompt": "loop prompt", "response": "loop response"}],
+    }
+    report = build_mca_report(result, "Test", {})
+
+    assert "strange_loops" in report
+    assert len(report["strange_loops"]) == 1
+
+
+def test_build_mca_report_missing_optional_fields():
+    """Test build_mca_report handles missing optional fields gracefully."""
+    result = {
+        "agent_history": {"L1N1": [{"response": "synth"}]},
+        "final_response": "final",
+    }
+    report = build_mca_report(result, "Test", {})
+
+    assert report["convergence"]["converged"] is False
+    assert report["convergence"]["score_trajectory"] == []
+    assert report["final_response"] == "final"
+    assert "strange_loops" not in report
+
+
+def test_build_mca_report_llm_call_counting():
+    """Test that total_llm_calls is counted accurately from round data."""
+    result = {
+        "agent_history": {
+            # Root: 1 observe call (response only, no lateral)
+            "L1N1": [{"response": "root synth", "revised": False}],
+            # Leaf with revision: 1 respond + 1 lateral = 2
+            "L2N1": [
+                {
+                    "response": "initial",
+                    "lateral_response": "revised",
+                    "revised": True,
+                }
+            ],
+            # Leaf without revision (no siblings, copied): 1 respond + 0 lateral = 1
+            "L2N2": [
+                {
+                    "response": "initial",
+                    "lateral_response": "initial",
+                    "revised": False,
+                }
+            ],
+            # Leaf with signal_sent: 1 respond + 1 signal = 2
+            "L2N3": [
+                {
+                    "response": "initial",
+                    "revised": False,
+                    "signal_sent": "explore more",
+                }
+            ],
+        },
+        "converged": True,
+        "convergence_scores": [],
+        "final_response": "final",
+    }
+    report = build_mca_report(result, "Test", {})
+
+    # L1N1: 1 (response)
+    # L2N1: 1 (response) + 1 (revised=True) = 2
+    # L2N2: 1 (response) + 0 (revised=False, lateral==response) = 1
+    # L2N3: 1 (response) + 0 (revised=False) + 1 (signal_sent) = 2
+    # Total: 1 + 2 + 1 + 2 = 6
+    assert report["summary_metrics"]["total_llm_calls"] == 6

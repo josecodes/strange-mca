@@ -5,6 +5,8 @@ emergent behaviors: lateral revision, convergence, downward signals, hierarchy
 processing, strange loops, and report structure.
 """
 
+import pytest
+
 from src.strange_mca.graph import create_execution_graph
 from src.strange_mca.run_strange_mca import build_mca_report
 from tests.conftest import build_mock_agents_depth2_cpp3, make_mock_agent
@@ -74,13 +76,21 @@ def test_convergence_over_multiple_rounds():
     """System should converge when root output stabilizes across rounds."""
     agents = build_mock_agents_depth2_cpp3()
 
-    # Root returns different text round 1, then identical text rounds 2 and 3
-    # Root is invoked once per round (observe_root)
-    agents["L1N1"].invoke.side_effect = [
-        "synthesis version one with unique content",  # round 1 observe
-        "synthesis version two with new content",  # round 2 observe
-        "synthesis version two with new content",  # round 3 observe (identical to round 2)
-    ]
+    # Use a prompt-based side_effect for the root so the test is resilient to
+    # execution order changes.  The root is only called for observe (prompt
+    # contains "TEAM RESPONSES").  Track call count to vary output by round.
+    observe_call_count = {"n": 0}
+
+    def root_prompt_responder(prompt):
+        if "TEAM RESPONSES" in prompt:
+            observe_call_count["n"] += 1
+            if observe_call_count["n"] == 1:
+                return "synthesis version one with unique content"
+            else:
+                return "synthesis version two with new content"
+        return "root fallback"
+
+    agents["L1N1"].invoke.side_effect = root_prompt_responder
 
     graph, recursion_limit = create_execution_graph(
         agents=agents,
@@ -153,14 +163,16 @@ def test_downward_signals_propagate_to_children():
     """Signals should propagate from root to children when enabled."""
     agents = build_mock_agents_depth2_cpp3()
 
-    # Root's invoke will be called for: observe (round 1), signal (round 1),
-    # observe (round 2)
-    agents["L1N1"].invoke.side_effect = [
-        "root synthesis round 1",  # observe_root round 1
-        "consider exploring edge cases",  # signal_down round 1
-        "root synthesis round 2",  # observe_root round 2
-        "signal round 2",  # signal_down round 2 (needed since max_rounds=2)
-    ]
+    # Use a prompt-based side_effect for the root.  Observe prompts contain
+    # "TEAM RESPONSES"; signal prompts contain "gaps or tensions".
+    def root_prompt_responder(prompt):
+        if "gaps or tensions" in prompt:
+            return "consider exploring edge cases"
+        if "TEAM RESPONSES" in prompt:
+            return "root synthesis"
+        return "root fallback"
+
+    agents["L1N1"].invoke.side_effect = root_prompt_responder
 
     # Each leaf is invoked for: respond (r1), lateral (r1), respond (r2), lateral (r2)
     for name in ["L2N1", "L2N2", "L2N3"]:
@@ -438,11 +450,17 @@ Refined output after strange loop reflection
 
 Brief reasoning for revisions."""
 
-    # Root: first call is observe_root, second call is strange loop
-    agents["L1N1"].invoke.side_effect = [
-        "raw root synthesis",
-        strange_response,
-    ]
+    # Use a prompt-based side_effect for the root.  The observe prompt
+    # contains "TEAM RESPONSES"; the strange loop prompt contains
+    # "best response" or "Is this the best response".
+    def root_prompt_responder(prompt):
+        if "best response" in prompt.lower():
+            return strange_response
+        if "TEAM RESPONSES" in prompt:
+            return "raw root synthesis"
+        return "root fallback"
+
+    agents["L1N1"].invoke.side_effect = root_prompt_responder
 
     graph, recursion_limit = create_execution_graph(
         agents=agents,
@@ -531,3 +549,335 @@ def test_report_structure_completeness():
     # Per-agent revision counts should exist for each agent
     for name in ["L1N1", "L2N1", "L2N2", "L2N3"]:
         assert name in metrics["per_agent_revision_counts"]
+
+
+# =============================================================================
+# Internal Level Ordering Tests
+# =============================================================================
+
+
+def test_depth3_internal_levels_process_bottom_up():
+    """Internal levels must process bottom-up so children are observed before parents.
+
+    With depth=3, cpp=2 the coordinators (L2) should see their children's (L3)
+    responses in their observe prompt.  If internal levels are processed top-down
+    the coordinators would see empty histories.
+    """
+    # Capture what the coordinators observe
+    coordinator_prompts = {"L2N1": [], "L2N2": []}
+
+    def make_coordinator_side_effect(agent_name):
+        def side_effect(prompt):
+            coordinator_prompts[agent_name].append(prompt)
+            return f"{agent_name} observation"
+
+        return side_effect
+
+    agents = {
+        "L1N1": make_mock_agent(
+            "L1N1", 1, 1, 3, 2, children=["L2N1", "L2N2"], response="root synthesis"
+        ),
+        "L2N1": make_mock_agent(
+            "L2N1",
+            2,
+            1,
+            3,
+            2,
+            siblings=["L2N2"],
+            parent="L1N1",
+            children=["L3N1", "L3N2"],
+        ),
+        "L2N2": make_mock_agent(
+            "L2N2",
+            2,
+            2,
+            3,
+            2,
+            siblings=["L2N1"],
+            parent="L1N1",
+            children=["L3N3", "L3N4"],
+        ),
+        "L3N1": make_mock_agent(
+            "L3N1",
+            3,
+            1,
+            3,
+            2,
+            siblings=["L3N2"],
+            parent="L2N1",
+            perspective="analytical",
+            response="leaf 1 analytical insight",
+        ),
+        "L3N2": make_mock_agent(
+            "L3N2",
+            3,
+            2,
+            3,
+            2,
+            siblings=["L3N1"],
+            parent="L2N1",
+            perspective="creative",
+            response="leaf 2 creative insight",
+        ),
+        "L3N3": make_mock_agent(
+            "L3N3",
+            3,
+            3,
+            3,
+            2,
+            siblings=["L3N4"],
+            parent="L2N2",
+            perspective="critical",
+            response="leaf 3 critical insight",
+        ),
+        "L3N4": make_mock_agent(
+            "L3N4",
+            3,
+            4,
+            3,
+            2,
+            siblings=["L3N3"],
+            parent="L2N2",
+            perspective="practical",
+            response="leaf 4 practical insight",
+        ),
+    }
+
+    agents["L2N1"].invoke.side_effect = make_coordinator_side_effect("L2N1")
+    agents["L2N2"].invoke.side_effect = make_coordinator_side_effect("L2N2")
+
+    graph, recursion_limit = create_execution_graph(
+        agents=agents, cpp=2, depth=3, max_rounds=1, enable_downward_signals=False
+    )
+
+    result = graph.invoke(
+        {"original_task": "Test task"},
+        config={"recursion_limit": recursion_limit},
+    )
+
+    # L2N1's observe prompt must contain its children's responses (L3N1 and L3N2)
+    assert len(coordinator_prompts["L2N1"]) >= 1
+    observe_prompt_l2n1 = coordinator_prompts["L2N1"][0]
+    assert (
+        "leaf 1 analytical insight" in observe_prompt_l2n1
+    ), "L2N1 observe prompt should contain L3N1's response"
+    assert (
+        "leaf 2 creative insight" in observe_prompt_l2n1
+    ), "L2N1 observe prompt should contain L3N2's response"
+
+    # L2N2's observe prompt must contain its children's responses (L3N3 and L3N4)
+    assert len(coordinator_prompts["L2N2"]) >= 1
+    observe_prompt_l2n2 = coordinator_prompts["L2N2"][0]
+    assert (
+        "leaf 3 critical insight" in observe_prompt_l2n2
+    ), "L2N2 observe prompt should contain L3N3's response"
+    assert (
+        "leaf 4 practical insight" in observe_prompt_l2n2
+    ), "L2N2 observe prompt should contain L3N4's response"
+
+
+def test_depth3_signals_propagate_through_coordinators():
+    """Signals should propagate from root through coordinators to leaves at depth=3.
+
+    Verifies the signal overwrite fix: coordinators must have BOTH
+    signal_received (from root) AND signal_sent (to their leaves).
+    """
+
+    def make_prompt_responder(default_response):
+        """Return a callable that responds based on prompt keywords."""
+
+        def responder(prompt):
+            if "gaps or tensions" in prompt:
+                return "signal from sender"
+            if "TEAM RESPONSES" in prompt:
+                return default_response
+            return default_response
+
+        return responder
+
+    agents = {
+        "L1N1": make_mock_agent(
+            "L1N1", 1, 1, 3, 2, children=["L2N1", "L2N2"], response="root synthesis"
+        ),
+        "L2N1": make_mock_agent(
+            "L2N1",
+            2,
+            1,
+            3,
+            2,
+            siblings=["L2N2"],
+            parent="L1N1",
+            children=["L3N1", "L3N2"],
+        ),
+        "L2N2": make_mock_agent(
+            "L2N2",
+            2,
+            2,
+            3,
+            2,
+            siblings=["L2N1"],
+            parent="L1N1",
+            children=["L3N3", "L3N4"],
+        ),
+        "L3N1": make_mock_agent(
+            "L3N1",
+            3,
+            1,
+            3,
+            2,
+            siblings=["L3N2"],
+            parent="L2N1",
+            perspective="analytical",
+            response="leaf 1 response",
+        ),
+        "L3N2": make_mock_agent(
+            "L3N2",
+            3,
+            2,
+            3,
+            2,
+            siblings=["L3N1"],
+            parent="L2N1",
+            perspective="creative",
+            response="leaf 2 response",
+        ),
+        "L3N3": make_mock_agent(
+            "L3N3",
+            3,
+            3,
+            3,
+            2,
+            siblings=["L3N4"],
+            parent="L2N2",
+            perspective="critical",
+            response="leaf 3 response",
+        ),
+        "L3N4": make_mock_agent(
+            "L3N4",
+            3,
+            4,
+            3,
+            2,
+            siblings=["L3N3"],
+            parent="L2N2",
+            perspective="practical",
+            response="leaf 4 response",
+        ),
+    }
+
+    # Use prompt-based side_effects for all non-leaf agents
+    agents["L1N1"].invoke.side_effect = make_prompt_responder("root synthesis")
+    agents["L2N1"].invoke.side_effect = make_prompt_responder(
+        "coordinator 1 observation"
+    )
+    agents["L2N2"].invoke.side_effect = make_prompt_responder(
+        "coordinator 2 observation"
+    )
+
+    # Leaves use simple side_effect lists (respond + lateral per round)
+    for name in ["L3N1", "L3N2", "L3N3", "L3N4"]:
+        agents[name].invoke.side_effect = [
+            f"{name} r1 response",
+            f"{name} r1 lateral",
+            f"{name} r2 response",
+            f"{name} r2 lateral",
+        ]
+
+    graph, recursion_limit = create_execution_graph(
+        agents=agents,
+        cpp=2,
+        depth=3,
+        max_rounds=2,
+        enable_downward_signals=True,
+    )
+
+    result = graph.invoke(
+        {"original_task": "Test task"},
+        config={"recursion_limit": recursion_limit},
+    )
+
+    history = result["agent_history"]
+
+    # Root (L1N1) should have signal_sent in round 1
+    assert (
+        "signal_sent" in history["L1N1"][0]
+    ), "Root should have signal_sent in round 1"
+
+    # Coordinators should have BOTH signal_received AND signal_sent in round 1
+    for coord_name in ["L2N1", "L2N2"]:
+        rd = history[coord_name][0]
+        assert (
+            "signal_received" in rd
+        ), f"{coord_name} should have signal_received from root"
+        assert (
+            "signal_sent" in rd
+        ), f"{coord_name} should have signal_sent to its leaves"
+
+    # All leaves should have signal_received in round 1
+    for leaf_name in ["L3N1", "L3N2", "L3N3", "L3N4"]:
+        assert (
+            "signal_received" in history[leaf_name][0]
+        ), f"{leaf_name} should have signal_received from its coordinator"
+
+
+# =============================================================================
+# Depth Validation Tests
+# =============================================================================
+
+
+def test_depth_validation_rejects_depth_1():
+    """create_execution_graph should raise ValueError for depth < 2."""
+    with pytest.raises(ValueError, match="depth must be >= 2"):
+        create_execution_graph(
+            agents={"L1N1": make_mock_agent("L1N1", 1, 1, 1, 2)}, cpp=2, depth=1
+        )
+
+
+# =============================================================================
+# Single-Child (cpp=1) Tests
+# =============================================================================
+
+
+def test_cpp1_single_child_no_lateral():
+    """With cpp=1 a leaf has no siblings, so lateral should be a no-op."""
+    agents = {
+        "L1N1": make_mock_agent(
+            "L1N1", 1, 1, 2, 1, children=["L2N1"], response="root synthesis"
+        ),
+        "L2N1": make_mock_agent(
+            "L2N1",
+            2,
+            1,
+            2,
+            1,
+            siblings=[],
+            parent="L1N1",
+            perspective="analytical",
+            response="solo leaf response",
+        ),
+    }
+
+    graph, recursion_limit = create_execution_graph(
+        agents=agents,
+        cpp=1,
+        depth=2,
+        max_rounds=1,
+        enable_downward_signals=False,
+    )
+
+    result = graph.invoke(
+        {"original_task": "Test task"},
+        config={"recursion_limit": recursion_limit},
+    )
+
+    history = result["agent_history"]
+    leaf_rd = history["L2N1"][0]
+
+    # With no siblings, lateral_response should equal the original response
+    assert (
+        leaf_rd["lateral_response"] == leaf_rd["response"]
+    ), "Leaf with no siblings should keep original response as lateral_response"
+    assert leaf_rd["revised"] is False, "No siblings means no revision"
+
+    # System should complete with a valid final_response
+    assert result["final_response"] == "root synthesis"

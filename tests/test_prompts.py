@@ -6,7 +6,6 @@ from src.strange_mca.prompts import (
     create_lateral_prompt,
     create_observation_prompt,
     create_signal_prompt,
-    create_signal_response_prompt,
     create_strange_loop_prompt,
     parse_strange_loop_response,
 )
@@ -162,25 +161,7 @@ def test_create_signal_prompt():
 
 
 # =============================================================================
-# Signal Response Prompt Tests
-# =============================================================================
-
-
-def test_create_signal_response_prompt():
-    """Test signal response prompt."""
-    prompt = create_signal_response_prompt(
-        task="Explain recursion",
-        own_response="My analysis.",
-        parent_signal="Consider edge cases.",
-        round_num=2,
-    )
-    assert "Explain recursion" in prompt
-    assert "My analysis." in prompt
-    assert "Consider edge cases." in prompt
-
-
-# =============================================================================
-# Strange Loop Tests (kept from original)
+# Strange Loop Tests
 # =============================================================================
 
 

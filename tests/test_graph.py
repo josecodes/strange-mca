@@ -263,6 +263,94 @@ domain refined
     assert len(loops) == 1
 
 
+def test_apply_strange_loop_multiple_iterations():
+    """Test _apply_strange_loop with strange_loop_count=2."""
+    agent = MagicMock()
+
+    first_response = """Analysis...
+
+Final Response:
+**************************************************
+Refined response iteration 1
+**************************************************"""
+
+    second_response = """Further analysis...
+
+Final Response:
+**************************************************
+Refined response iteration 2
+**************************************************"""
+
+    agent.invoke.side_effect = [first_response, second_response]
+
+    final_response, loops = _apply_strange_loop(
+        agent, "Initial response", "Test task", 2, ""
+    )
+
+    # Agent should be invoked exactly 2 times
+    assert agent.invoke.call_count == 2
+
+    # Final response should be parsed from the last iteration
+    assert final_response == "Refined response iteration 2"
+
+    # Should have exactly 2 loop entries
+    assert len(loops) == 2
+    for loop in loops:
+        assert "prompt" in loop
+        assert "response" in loop
+
+    # Second call's prompt should contain the parsed output from iteration 1
+    second_call_prompt = agent.invoke.call_args_list[1][0][0]
+    assert "Refined response iteration 1" in second_call_prompt
+
+
+def test_apply_strange_loop_with_count_and_domain_instructions():
+    """Test _apply_strange_loop with count=1 AND domain_instructions.
+
+    local_count = 1 + 1 = 2. Last iteration should include domain instructions.
+    """
+    agent = MagicMock()
+
+    first_response = """First iteration...
+
+Final Response:
+**************************************************
+First refined response
+**************************************************"""
+
+    second_response = """With domain...
+
+Final Response:
+**************************************************
+Final concise response
+**************************************************"""
+
+    agent.invoke.side_effect = [first_response, second_response]
+
+    final_response, loops = _apply_strange_loop(
+        agent, "Initial response", "Test task", 1, "Be concise."
+    )
+
+    # Agent invoked 2 times (1 + 1 for domain)
+    assert agent.invoke.call_count == 2
+    assert len(loops) == 2
+
+    # First prompt should NOT include domain instructions
+    first_prompt = agent.invoke.call_args_list[0][0][0]
+    assert "Be concise." not in first_prompt
+
+    # Last prompt should include domain instructions
+    last_prompt = agent.invoke.call_args_list[1][0][0]
+    assert "Be concise." in last_prompt
+
+    assert final_response == "Final concise response"
+
+
+def test_merge_dicts_both_none():
+    """Test merge_dicts when both arguments are None."""
+    assert merge_dicts(None, None) == {}
+
+
 # =============================================================================
 # run_execution_graph Tests
 # =============================================================================

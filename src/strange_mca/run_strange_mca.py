@@ -56,11 +56,23 @@ def build_mca_report(result: dict, task: str, config: dict) -> dict:
             round_data["convergence_score"] = None
         rounds.append(round_data)
 
-    # Summary metrics
-    total_llm_calls = sum(
-        len(h) * 2  # respond + lateral per round (approximate)
-        for h in agent_history.values()
-    )
+    # Count total LLM calls precisely by inspecting round data fields:
+    # - "response" present -> 1 call (initial respond or observe)
+    # - "revised" is True OR lateral_response differs from response -> 1 call
+    #   (agent was actually invoked for lateral communication)
+    # - "signal_sent" present -> 1 call (signal generation)
+    total_llm_calls = 0
+    for _name, h in agent_history.items():
+        for rd in h:
+            if "response" in rd:
+                total_llm_calls += 1
+            if rd.get("revised", False) or (
+                "lateral_response" in rd
+                and rd["lateral_response"] != rd.get("response")
+            ):
+                total_llm_calls += 1
+            if "signal_sent" in rd:
+                total_llm_calls += 1
     revision_counts = {}
     total_lateral_phases = 0
     total_revised = 0

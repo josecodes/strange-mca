@@ -21,7 +21,7 @@ logger = logging.getLogger("strange_mca")
 def visualize_agent_tree(
     cpp: int,
     depth: int,
-    output_path: str = None,
+    output_path: Optional[str] = None,
     format: str = "png",
 ) -> Optional[str]:
     """Visualize the agent tree structure with lateral edges.
@@ -130,7 +130,9 @@ def visualize_langgraph(
     """Visualize the agent tree structure.
 
     Args:
-        graph: The compiled LangGraph (unused, kept for API compatibility).
+        graph: The compiled LangGraph. Reserved for future use when actual
+            graph introspection is implemented. Currently unused because
+            nested subgraphs don't produce clean visualizations.
         output_dir: Directory to save the visualization.
         cpp: Children per parent.
         depth: Total tree depth.
@@ -139,6 +141,7 @@ def visualize_langgraph(
     Returns:
         The path to the saved visualization file, or None if visualization failed.
     """
+    _ = graph  # Reserved for future graph introspection
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, filename)
 

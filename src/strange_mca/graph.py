@@ -30,6 +30,7 @@ from src.strange_mca.tree_helpers import (
     count_nodes_at_level,
     generate_all_nodes,
     is_leaf,
+    make_node_name,
     parse_node_name,
 )
 
@@ -42,7 +43,13 @@ logger = logging.getLogger("strange_mca")
 
 
 def merge_dicts(left: dict, right: dict) -> dict:
-    """Merge two dictionaries, with right overwriting left."""
+    """Merge two dictionaries, with right overwriting left.
+
+    WARNING: This is a shallow merge — keys in ``right`` completely replace the
+    corresponding keys in ``left``.  Graph nodes that update ``agent_history``
+    must therefore return **complete** agent history lists for every agent they
+    touch, not partial updates, to avoid data loss.
+    """
     if left is None:
         return right or {}
     if right is None:
@@ -147,13 +154,17 @@ def create_execution_graph(
     Returns:
         Compiled LangGraph.
     """
+    if depth < 2:
+        raise ValueError("depth must be >= 2 (need at least a root and leaf level)")
+
     # Precompute topology
     all_nodes = generate_all_nodes(cpp, depth)
     leaf_names = [n for n in all_nodes if is_leaf(parse_node_name(n)[0], depth)]
     root_name = "L1N1"
 
     # Compute internal levels (between root and leaves, exclusive)
-    internal_levels = list(range(2, depth)) if depth > 2 else []
+    # Process bottom-up: highest level first so children are observed before parents
+    internal_levels = list(range(depth - 1, 1, -1)) if depth > 2 else []
 
     builder = StateGraph(MCAState)
 
@@ -265,8 +276,6 @@ def create_execution_graph(
                 node_count = count_nodes_at_level(level, cpp)
 
                 for node_idx in range(1, node_count + 1):
-                    from src.strange_mca.tree_helpers import make_node_name
-
                     name = make_node_name(level, node_idx)
                     agent = agents[name]
                     history = list(state["agent_history"].get(name, []))
@@ -310,8 +319,6 @@ def create_execution_graph(
                 node_count = count_nodes_at_level(level, cpp)
 
                 for node_idx in range(1, node_count + 1):
-                    from src.strange_mca.tree_helpers import make_node_name
-
                     name = make_node_name(level, node_idx)
                     agent = agents[name]
                     history = copy.deepcopy(state["agent_history"][name])
@@ -399,7 +406,9 @@ def create_execution_graph(
 
         for name in non_leaf_names:
             agent = agents[name]
-            history = copy.deepcopy(state["agent_history"][name])
+            # Use updates if this agent was already written (e.g., as a child
+            # receiving signal_received), otherwise fall back to state.
+            history = copy.deepcopy(updates.get(name, state["agent_history"][name]))
             if not history:
                 continue
 
@@ -424,9 +433,12 @@ def create_execution_graph(
             history[-1]["signal_sent"] = signal
             updates[name] = history
 
-            # Store signal_received on each child
+            # Store signal_received on each child — use updates if the child
+            # was already written, to avoid overwriting prior data.
             for child_name in agent.config.children:
-                child_hist = copy.deepcopy(state["agent_history"].get(child_name, []))
+                child_hist = copy.deepcopy(
+                    updates.get(child_name, state["agent_history"].get(child_name, []))
+                )
                 if child_hist:
                     child_hist[-1]["signal_received"] = signal
                     updates[child_name] = child_hist
@@ -535,9 +547,8 @@ def create_execution_graph(
     builder.add_edge("finalize", END)
 
     # Compute recursion limit
-    num_graph_nodes = (
-        2 + len(internal_levels) * 2 + 3 + 1
-    )  # init, leaf pair, internal pairs, root+signal+convergence, finalize
+    # init+leaf_respond+leaf_lateral, internal pairs, root+signal+convergence, finalize
+    num_graph_nodes = 3 + len(internal_levels) * 2 + 3 + 1
     recursion_limit = max(50, max_rounds * (num_graph_nodes + 5))
 
     return builder.compile(), recursion_limit

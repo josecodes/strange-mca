@@ -14,8 +14,6 @@ pydantic = "^2.5.2"
 graphviz = "^0.20.1"
 python-dotenv = "^1.0.0"
 langgraph = "^0.3.2"
-networkx = "^3.2.1"
-matplotlib = "^3.8.2"
 
 [tool.poetry.group.arena.dependencies]
 textarena = "^0.5.9"
