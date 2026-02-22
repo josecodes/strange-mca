@@ -4,7 +4,7 @@ A multiagent system that models a [Multiscale Competency Architecture](https://p
 
 The MCA concept comes from Michael Levin's work on how biological systems exhibit competence across multiple scales — from cells to organisms to social groups. This project uses LLMs as the information-processing nodes in a simplified software model of that idea. The Strange Loop component adds configurable self-reflection at the root node during finalization.
 
-The `examples` directory includes [TextArena](https://github.com/LeonGuertler/TextArena) integration for running strange-mca agents in game environments (chess, etc.) against single-LLM opponents. Each run produces a `final_state.json` and `mca_report.json` in the output directory for inspecting agent behavior.
+Each run produces a `final_state.json` and `mca_report.json` in the output directory for inspecting agent behavior.
 
 ## High Level Architecture
 
@@ -42,7 +42,6 @@ The strange loop self-reflection occurs at finalization, after convergence.
 - **Strange Loop Refinement**: Optional self-critique and refinement of the final response at the root
 - **Visualization Tools**: Generate visual representations of the agent tree and execution graph
 - **Observability Reports**: JSON reports (`mca_report.json`) with per-round agent data, convergence trajectory, LLM call counts, and lateral revision rates
-- **TextArena Integration**: Run strange-mca agents in game environments using TextArena
 
 ## Installation
 
@@ -64,12 +63,7 @@ The strange loop self-reflection occurs at finalization, after convergence.
    poetry install
    ```
 
-3. (Optional) Install TextArena dependencies:
-   ```bash
-   poetry install --with arena
-   ```
-
-4. Create a `.env` file in the project root with your OpenAI API key:
+3. Create a `.env` file in the project root with your OpenAI API key:
    ```
    OPENAI_API_KEY=your_api_key_here
    ```
@@ -140,71 +134,6 @@ report = build_mca_report(result, task="...", config={...})
 # report contains: task, config, rounds (per-agent data), convergence, summary_metrics, final_response
 ```
 
-### TextArena Integration
-
-
-![Curses Chess Interface](assets/curses-chess.png)
-*Figure: strange-mca vs. single LLM agent playing chess*
-
-
-
-strange-mca can be used with [TextArena](https://github.com/LeonGuertler/TextArena) to create agents that play games and solve interactive tasks. The integration is available in the `examples/arena` directory.
-
-#### Running a TextArena Game
-
-```bash
-poetry run python examples/arena/strange_basic_twoplayer.py
-```
-
-This will run a two-player game (SpellingBee by default) with a strange-mca agent competing against an OpenAI agent.
-
-#### Available Game Scripts
-
-- `strange_basic_twoplayer.py`: Runs a basic two-player game without rendering
-- `strange_rendered_twoplayer.py`: Runs a two-player game with visual rendering
-
-#### Creating Custom Game Scripts
-
-You can create custom game scripts by following the template in the existing scripts. The key components are:
-
-1. Initialize the strange-mca agent with appropriate parameters
-2. Set up the game environment using TextArena
-3. Create a game loop to manage turns and actions
-
-Example:
-
-```python
-import textarena as ta
-from strangemca_textarena import StrangeMCAAgent
-
-# Initialize agents
-agents = {
-    0: StrangeMCAAgent(
-        child_per_parent=2,
-        depth=2,
-        model="gpt-4o-mini",
-        domain_specific_instructions="Your game-specific instructions here",
-        strange_loop_count=2
-    ),
-    1: ta.agents.OpenAIAgent(
-        model_name="gpt-4o-mini",
-        system_prompt="Your system prompt here",
-    ),
-}
-
-# Initialize environment
-env = ta.make(env_id="Chess-v0")
-env = ta.wrappers.LLMObservationWrapper(env=env)
-
-# Game loop
-env.reset(num_players=len(agents))
-done = False
-while not done:
-    player_id, observation = env.get_observation()
-    action = agents[player_id](observation)
-    done, info = env.step(action=action)
-```
-
 ## Project Structure
 
 - `src/strange_mca/`: Core implementation
@@ -222,10 +151,6 @@ while not done:
   - `test_main.py`, `test_run_strange_mca.py`, `test_visualization.py`: Integration tests
   - `test_emergent_properties.py`: Automated tests for emergent behavior properties
   - `test_live_integration.py`: Live tests requiring `OPENAI_API_KEY` (marked `@pytest.mark.live`)
-- `examples/arena/`: TextArena integration
-  - `strangemca_textarena.py`: strange-mca / TextArena adapter
-  - `strange_basic_twoplayer.py`: Basic two-player game script
-  - `strange_rendered_twoplayer.py`: Two-player game with rendering
 - `docs/`: Design documents and RFCs
 - `scripts/`: Linting and development scripts
 - `output/`: Generated outputs, reports, and visualizations
@@ -252,7 +177,7 @@ Live tests hit the OpenAI API and verify end-to-end behavior including lateral c
 
 ## Future Ideas and Improvements
 
-This system mainly serves as a conceptual playground to model MCA and StrangeLoop in a multiagent system; this will be the focus, not building a production system or things like scale and performance. It may solve puzzles better than its non-MCA competitors one day; the current level of chess competition is about even and is about who can send an invalid response last, as you might expect. Future more powerful agents will make this a more interesting competition.
+This system mainly serves as a conceptual playground to model MCA and Strange Loop in a multiagent system; the focus is on exploring these concepts, not building a production system.
 
 See [GitHub Issues](https://github.com/josecodes/strange-mca/issues) for planned improvements, organized by label:
 - [`mca`](https://github.com/josecodes/strange-mca/labels/mca) - Multiscale Competency Architecture enhancements
@@ -291,5 +216,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgments
 
 - This project uses [LangGraph](https://github.com/langchain-ai/langgraph) for graph-based execution
-- TextArena integration is based on [TextArena](https://github.com/LeonGuertler/TextArena)
 - Inspired by Michael Levin's work on [Multiscale Competency Architectures](https://pubmed.ncbi.nlm.nih.gov/37156924/) and Douglas Hofstadter's [Strange Loop](https://en.wikipedia.org/wiki/Strange_loop)
