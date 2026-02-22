@@ -25,9 +25,13 @@ class StrangeMCAAgent(ta.Agent):
 
     def __init__(
         self,
-        child_per_parent: int = 2,
+        child_per_parent: int = 3,
         depth: int = 2,
-        model: str = "gpt-3.5-turbo",
+        model: str = "gpt-4o-mini",
+        max_rounds: int = 3,
+        convergence_threshold: float = 0.85,
+        enable_downward_signals: bool = True,
+        perspectives: Optional[list[str]] = None,
         viz: bool = False,
         print_details: bool = False,
         task_template: Optional[str] = None,
@@ -41,13 +45,23 @@ class StrangeMCAAgent(ta.Agent):
             child_per_parent: Number of children per parent node in the agent tree.
             depth: Depth of the agent tree.
             model: The model to use for the agents.
+            max_rounds: Maximum rounds for convergence.
+            convergence_threshold: Jaccard similarity threshold for convergence.
+            enable_downward_signals: Enable parent-to-child signals.
+            perspectives: Custom perspectives for leaf agents.
             viz: Whether to generate visualizations.
             print_details: Whether to print detailed information.
-            task_template: Optional template for formatting the task. If None, the observation is used as is.
+            task_template: Optional template for formatting the task.
+            domain_specific_instructions: Domain-specific instructions for strange loop.
+            strange_loop_count: Number of strange loop iterations.
         """
         self.child_per_parent = child_per_parent
         self.depth = depth
         self.model = model
+        self.max_rounds = max_rounds
+        self.convergence_threshold = convergence_threshold
+        self.enable_downward_signals = enable_downward_signals
+        self.perspectives = perspectives
         self.viz = viz
         self.print_details = print_details
         self.task_template = task_template
@@ -65,7 +79,6 @@ class StrangeMCAAgent(ta.Agent):
             The action to take.
         """
         try:
-            # Format the task if a template is provided
             if self.task_template:
                 task = self.task_template.format(observation=observation)
             else:
@@ -76,6 +89,10 @@ class StrangeMCAAgent(ta.Agent):
                 child_per_parent=self.child_per_parent,
                 depth=self.depth,
                 model=self.model,
+                max_rounds=self.max_rounds,
+                convergence_threshold=self.convergence_threshold,
+                enable_downward_signals=self.enable_downward_signals,
+                perspectives=self.perspectives,
                 viz=self.viz,
                 print_details=self.print_details,
                 domain_specific_instructions=self.domain_specific_instructions,
@@ -83,13 +100,11 @@ class StrangeMCAAgent(ta.Agent):
             )
             final_response = result.get("final_response", "")
 
-            # Fallback if no response generated
             if not final_response or not final_response.strip():
                 return "I need more information to proceed."
 
             return final_response
 
         except Exception as e:
-            # Log the error and return a safe fallback response
             print(f"Error in StrangeMCA agent: {e}")
             return "I encountered an error processing that request."

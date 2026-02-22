@@ -1,32 +1,23 @@
 #!/usr/bin/env python
 """
-Main script for the Strange MCA (Multi-Agent Conversation Architecture).
+Main script for the Strange MCA (Multiscale Competency Architecture).
 
-This script creates and runs a multi-agent system using a bidirectional graph
-for task decomposition and response synthesis.
+This script creates and runs the emergent MCA system using a flat LangGraph
+with round-based bottom-up processing.
 """
 
 import argparse
-import copy
 import datetime
-import json
 import logging
 import os
 
 from dotenv import load_dotenv
 
-from src.strange_mca.graph import (
-    create_execution_graph,
-    run_execution_graph,
-    total_nodes,
-)
+from src.strange_mca.tree_helpers import total_nodes
 from src.strange_mca.visualization import (
     print_agent_tree,
-    visualize_agent_tree,
-    visualize_langgraph,
 )
 
-# Set up logger
 logger = logging.getLogger("strange_mca")
 
 
@@ -51,10 +42,8 @@ def create_output_dir(child_per_parent: int, depth: int, model: str) -> str:
 
 def main():
     """Run the main script."""
-    # Load environment variables from .env file if it exists
     load_dotenv()
 
-    # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description="Run the Strange MCA multi-agent system"
     )
@@ -76,8 +65,38 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="gpt-3.5-turbo",
+        default="gpt-4o-mini",
         help="The name of the LLM model to use",
+    )
+    parser.add_argument(
+        "--max_rounds",
+        type=int,
+        default=3,
+        help="Maximum number of rounds for convergence",
+    )
+    parser.add_argument(
+        "--convergence_threshold",
+        type=float,
+        default=0.85,
+        help="Jaccard similarity threshold for convergence (0-1)",
+    )
+    parser.add_argument(
+        "--enable_downward_signals",
+        action="store_true",
+        default=True,
+        help="Enable parent-to-child signals (default: on)",
+    )
+    parser.add_argument(
+        "--no_downward_signals",
+        action="store_true",
+        help="Disable parent-to-child signals",
+    )
+    parser.add_argument(
+        "--perspectives",
+        nargs="+",
+        type=str,
+        default=None,
+        help="Custom perspectives for leaf agents",
     )
     parser.add_argument(
         "--log_level",
@@ -121,6 +140,9 @@ def main():
 
     args = parser.parse_args()
 
+    # Handle downward signals flag
+    enable_downward_signals = not args.no_downward_signals
+
     # Set up logging
     log_level = getattr(logging, args.log_level.upper())
     if args.local_logs_only:
@@ -141,9 +163,11 @@ def main():
     logger.info(f"  Children per parent: {args.child_per_parent}")
     logger.info(f"  Depth: {args.depth}")
     logger.info(f"  Model: {args.model}")
+    logger.info(f"  Max rounds: {args.max_rounds}")
+    logger.info(f"  Convergence threshold: {args.convergence_threshold}")
+    logger.info(f"  Downward signals: {enable_downward_signals}")
     logger.info(f"  Output directory: {output_dir}")
 
-    # Calculate the total number of agents
     num_agents = total_nodes(args.child_per_parent, args.depth)
     logger.info(f"Total agents: {num_agents}")
 
@@ -152,75 +176,51 @@ def main():
         print_agent_tree(args.child_per_parent, args.depth)
         print()
 
-    # Visualize the agent tree if requested
-    if args.viz:
-        output_file = visualize_agent_tree(
-            cpp=args.child_per_parent,
-            depth=args.depth,
-            output_path=os.path.join(output_dir, "agent_tree"),
-            format="png",
-        )
-        if output_file:
-            logger.info(f"Agent tree visualization saved to {output_file}")
-
-    # Exit if this is a dry run
+    # Exit if dry run
     if args.dry_run:
         logger.info("Dry run completed")
         return
 
-    # Create the execution graph
-    logger.info("Creating execution graph...")
-    graph = create_execution_graph(
+    # Import here to avoid circular imports and allow dry_run without API key
+    from src.strange_mca.run_strange_mca import run_strange_mca
+
+    result = run_strange_mca(
+        task=args.task,
         child_per_parent=args.child_per_parent,
         depth=args.depth,
-        model_name=args.model,
-        langgraph_viz_dir=None,  # We'll handle visualization separately
-        domain_specific_instructions=args.domain_specific_instructions,
+        model=args.model,
+        max_rounds=args.max_rounds,
+        convergence_threshold=args.convergence_threshold,
+        enable_downward_signals=enable_downward_signals,
+        perspectives=args.perspectives,
         strange_loop_count=args.strange_loop_count,
-    )
-
-    # Generate LangGraph visualization if requested
-    if args.viz:
-        visualize_langgraph(graph, output_dir, args.child_per_parent, args.depth)
-
-    # Run the execution graph
-    logger.info("Running execution graph...")
-    result = run_execution_graph(
-        execution_graph=graph,
-        task=args.task,
+        domain_specific_instructions=args.domain_specific_instructions,
         log_level=args.log_level,
-        only_local_logs=args.local_logs_only,
-        langgraph_viz_dir=None,  # We've already handled visualization
+        viz=args.viz,
+        local_logs_only=args.local_logs_only,
+        print_details=args.print_details,
+        output_dir=output_dir,
     )
 
-    # Print the final response
-    logger.info("Graph execution completed")
+    # Print final response
     print("\nFinal Response:")
     print("=" * 80)
     print(result.get("final_response", "No final response generated"))
     print("=" * 80)
 
-    if args.print_details:
-        print("\nFull State:")
-        print("=" * 80)
-        # Create a DEEP copy of the result to avoid modifying the original
-        state_copy = copy.deepcopy(result)
-        print(json.dumps(state_copy, indent=2))
-        print("=" * 80)
-
-    # Save the full state to a JSON file
-    state_file = os.path.join(output_dir, "final_state.json")
-    with open(state_file, "w") as f:
-        json.dump(result, f, indent=2)
-    print(f"Full state saved to: {state_file}")
-
-    # Print summary
+    # Print summary metrics
+    convergence_scores = result.get("convergence_scores", [])
+    current_round = result.get("current_round", 1)
     print("\nExecution Summary:")
     print(
         f"Tree structure: {args.child_per_parent} children per parent, {args.depth} levels deep"
     )
     print(f"Task: {args.task}")
     print(f"Model: {args.model}")
+    print(f"Rounds used: {current_round - 1}")
+    print(f"Converged: {result.get('converged', False)}")
+    if convergence_scores:
+        print(f"Convergence scores: {convergence_scores}")
     print(f"Output saved to: {output_dir}")
 
     logger.info("Execution completed")
