@@ -57,6 +57,12 @@ known-first-party = ["strange_mca"]
 # Ignore module level import not at top of file in examples/arena files
 "examples/arena/*" = ["E402"]
 
+[tool.pytest.ini_options]
+markers = [
+    "live: tests that call a real LLM (deselected by default, run with: pytest -m live)",
+]
+addopts = "-m 'not live'"
+
 [build-system]
 requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api" 
+build-backend = "poetry.core.masonry.api"
