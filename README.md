@@ -1,20 +1,14 @@
-# **strange-mca**: MCA with a strange loop
+# strange-mca
 
-<img src="assets/strange-mca-logo.png" alt="strange-mca Logo" width="150" align="left" style="margin-right: 20px; margin-bottom: 10px;">
+A multiagent system that models a [Multiscale Competency Architecture](https://pubmed.ncbi.nlm.nih.gov/37156924/) (MCA) with [Strange Loop](https://en.wikipedia.org/wiki/Strange_loop) self-reflection. LLM agents are arranged in a hierarchy where each agent responds independently from a unique perspective, communicates laterally with peers, and iterates in rounds until the root's output converges. Higher-order behavior emerges from local interaction, not top-down assignment.
 
-This multiagent system is a simplified model of a Multiscale Competency Architecture (MCA). Since reading about MCAs in [one](https://pubmed.ncbi.nlm.nih.gov/37156924/) of Michael Levin's recent papers, I see MCAs everywhere :).  Levin poses them as a framework to conceptualize how biological systems exhibit competence (i.e. problem solving skills) across multiple scales - from cells to tissues to organs to organisms to social groups. I've been looking for a way to model the concept in software, and using LLMs as information processing nodes in an MCA seemed like a fun experiment.
+The MCA concept comes from Michael Levin's work on how biological systems exhibit competence across multiple scales — from cells to organisms to social groups. This project uses LLMs as the information-processing nodes in a simplified software model of that idea. The Strange Loop component adds configurable self-reflection at the root node during finalization.
 
-This system is also inspired by Hofstadter's [Strange Loop](https://en.wikipedia.org/wiki/Strange_loop). There is a bit of (configurable) self-reflection when giving a response to a prompt at the root node in this system. Perhaps this is similar to what today's reasoning models do (albeit in more sophisticated form)
-
-For both MCA and Strange Loop concepts, this system is a minimal (but fun) attempt at running a multiagent system that models these concepts. In the *Future Ideas and Improvements* section near the end, I share some thoughts for iteration on the system.
-
-I thought it would make for interesting behavior and comparisons to point this at an OpenAI Gym style environment like TextArena to see it play chess and other games against other LLMs. So I have included TextArena integration code in the `examples` section.
-
-Probably the most fun thing to do with it right now, besides asking ambiguous or absurd questions, is to have it play a game of chess against a single LLM of the same spec. They play about as well as you'd expect a LLM to play chess, but it is interesting to see agents independently respond from unique perspectives, communicate laterally with peers, and iterate in rounds until the root's output converges — then see the strange loop do its thing on the final response. In the `assets` directory there is an example output `final_state.json` that shows the first turn `state` object for the strange-mca set at 2 child-per-node, 3 levels, and gpt-4o-mini. All the messy chatter in its full glory to look through if it sounds interesting. This json is produced in the output dir for every execution of strange-mca. The json file is the main way to inspect how the agents behaved. You can also play with cmd line args to get more info in stdout.
+The `examples` directory includes [TextArena](https://github.com/LeonGuertler/TextArena) integration for running strange-mca agents in game environments (chess, etc.) against single-LLM opponents. Each run produces a `final_state.json` and `mca_report.json` in the output directory for inspecting agent behavior.
 
 ## High Level Architecture
 
-The system uses a single **flat LangGraph `StateGraph`** with round-based bottom-up processing. Rather than top-down task decomposition, each agent responds independently from a unique perspective, communicates laterally with peers, and iterates in rounds until the root's output converges. Higher-order behavior emerges from local interaction, not top-down assignment.
+The system uses a single **flat LangGraph `StateGraph`** with round-based bottom-up processing:
 
 ```
 init → leaf_respond → leaf_lateral → [observe_L{n} → lateral_L{n}]* → observe_root → signal_down → check_convergence → [loop | finalize] → END
