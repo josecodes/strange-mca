@@ -9,11 +9,11 @@
 
 ## 1. Summary
 
-This document specifies a redesign of strange-mca to test whether LLM agents arranged in a hierarchy can produce emergent behavior through local interaction — the core claim of a Multiscale Competency Architecture. The current system is a top-down task decomposition tree. This redesign adds a round-based, bottom-up execution mode (`mca_mode=True`) alongside the existing system, preserving backward compatibility.
+This document specifies a redesign of strange-mca to test whether LLM agents arranged in a hierarchy can produce emergent behavior through local interaction — the core claim of a Multiscale Competency Architecture. The current top-down task decomposition tree is replaced with a round-based, bottom-up execution model using a flat LangGraph.
 
 The key hypothesis: **when agents respond independently, communicate laterally with peers, and have their outputs observed (not directed) by parent agents, the collective output will exhibit properties that no individual agent produced.** This design optimizes for making that hypothesis testable.
 
-Design decisions draw from both prior documents. The execution model follows the RFC's round-based bottom-up approach. Backward compatibility follows the rearchitecture design's dual-mode strategy. Convergence uses the RFC's deterministic metric. Observability is a first-class concern throughout, since the point is to evaluate whether emergence actually occurs.
+Design decisions draw from both prior documents. The execution model follows the RFC's round-based bottom-up approach. Convergence uses the RFC's deterministic metric. Observability is a first-class concern throughout, since the point is to evaluate whether emergence actually occurs.
 
 ---
 
@@ -54,36 +54,31 @@ See `rfc-bottom-up-emergent-mca.md` Section 2 and `gt-mca-rearchitecture-design.
 
 **Preserved hierarchy.** The tree structure is maintained. Each level represents a different scale of organization with qualitatively different competency prompts — specialists, coordinators, integrator.
 
-**Backward compatibility.** The existing execution model, API, CLI, TextArena integration, and tests continue to work unchanged. MCA behavior is activated via `mca_mode=True`.
-
 **Observability as a feature.** Every round's state is captured. The system produces enough data to determine whether emergence is happening or whether the output is just averaged-out mush.
 
 ---
 
 ## 4. Architecture Overview
 
-Two execution modes sharing the same agent tree, state management, and output format:
+A single flat LangGraph `StateGraph` replaces the existing nested subgraph architecture. All agents exist as entries in a shared state dict, and graph nodes iterate over the relevant agents at each phase.
 
 ```
-                     run_strange_mca(task, mca_mode=False)
+                     run_strange_mca(task)
                               │
-                     create_execution_graph()          ← existing nested subgraphs
+                     build_agent_tree()           ← topology-aware agents
                               │
-                     Sequential down-up pass
-                              │
-                     Result + final_state.json
-
-
-                     run_strange_mca(task, mca_mode=True)
-                              │
-                     create_mca_execution_graph()      ← NEW flat graph
+                     create_execution_graph()     ← flat StateGraph
                               │
                      Round-based bottom-up processing
                               │
-                     Result + final_state.json + mca_report.json
+                     Result + mca_report.json
 ```
 
-The two graph builders share tree helper functions from `graph.py` and the `Agent` class from `agents.py`. They produce output in the same format (`final_response`, `strange_loops`), with MCA mode adding supplementary observability data.
+The flat graph is the right fit for iterative, round-based execution with lateral communication:
+- All agents share a single state dict — siblings read each other's responses directly
+- Conditional back-edges enable the convergence loop natively in LangGraph
+- Python loops inside node functions handle per-agent iteration; LLM calls are the bottleneck, not graph traversal
+- The graph is easy to debug and visualize — flat node names, explicit routing
 
 ---
 
@@ -126,7 +121,7 @@ ROUND N:
      Otherwise → next round.
 
 FINALIZE:
-  Root applies strange loop self-reflection (preserved from current design).
+  Root applies strange loop self-reflection (if `strange_loop_count > 0`).
   Emit final_response + observability data.
 ```
 
@@ -146,28 +141,25 @@ After observing, coordinators see sibling coordinators' syntheses and can revise
 
 ### 5.4 Root Node Processing
 
-The root is an integrator. It observes its children's syntheses and produces a holistic response. After the round loop converges, the existing strange loop self-reflection is applied (if `strange_loop_count > 0`).
+The root is an integrator. It observes its children's syntheses and produces a holistic response. After the round loop converges, the strange loop self-reflection is applied (if `strange_loop_count > 0`).
 
 ---
 
 ## 6. Agent Model
 
-### 6.1 AgentConfig (extended)
+### 6.1 AgentConfig
 
 ```python
 class AgentConfig(BaseModel):
-    # Existing fields — unchanged
     name: str
     level: int
     node_number: int
+    depth: int                             # Total tree depth
     system_prompt: Optional[str] = ""
-
-    # New fields for MCA mode
-    depth: int = 0                     # Total tree depth (0 = legacy mode)
-    siblings: list[str] = []           # Peer node names (same parent)
-    children: list[str] = []           # Child node names
-    parent: Optional[str] = None       # Parent node name (None for root)
-    perspective: str = ""              # Unique perspective (leaf agents only)
+    siblings: list[str] = []               # Peer node names (same parent)
+    children: list[str] = []               # Child node names
+    parent: Optional[str] = None           # Parent node name (None for root)
+    perspective: str = ""                  # Unique perspective (leaf agents only)
 
     @property
     def full_name(self) -> str:
@@ -175,7 +167,7 @@ class AgentConfig(BaseModel):
 
     @property
     def is_leaf(self) -> bool:
-        return self.depth > 0 and self.level == self.depth
+        return self.level == self.depth
 
     @property
     def is_root(self) -> bool:
@@ -183,8 +175,6 @@ class AgentConfig(BaseModel):
 
     @property
     def role(self) -> str:
-        if self.depth == 0:
-            return "legacy"
         if self.is_root:
             return "integrator"
         if self.is_leaf:
@@ -192,30 +182,17 @@ class AgentConfig(BaseModel):
         return "coordinator"
 ```
 
-New fields all have defaults that preserve existing behavior. Existing tests that construct `AgentConfig(name=..., level=..., node_number=...)` continue to work.
-
 ### 6.2 Agent Class
-
-The `Agent` class gains one new method. The existing `run()` is unchanged.
 
 ```python
 class Agent:
-    def __init__(self, config: AgentConfig, model_name: str = "gpt-3.5-turbo"):
+    def __init__(self, config: AgentConfig, model_name: str = "gpt-4o-mini"):
         self.config = config
         self.system_prompt = config.system_prompt or ""
         self.llm = ChatOpenAI(model=model_name, temperature=0.7)
 
-    def run(self, task: str) -> str:
-        """Legacy mode — unchanged."""
-        messages = [
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=f"Task: {task}\n\nYour response:"),
-        ]
-        response = self.llm.invoke(messages)
-        return response.content
-
     def invoke(self, prompt: str) -> str:
-        """MCA mode — passes prompt directly without 'Task:' wrapper."""
+        """Pass prompt directly as a HumanMessage."""
         messages = [
             SystemMessage(content=self.system_prompt),
             HumanMessage(content=prompt),
@@ -224,9 +201,7 @@ class Agent:
         return response.content
 ```
 
-The `invoke()` method is the MCA entry point. It passes the prompt directly as a HumanMessage, without the `"Task: {task}\n\nYour response:"` wrapper that `run()` uses. MCA prompts are richer and self-contained — they don't need the wrapper.
-
-The system prompt for MCA agents is the competency prompt (see Section 10), set at construction time via `AgentConfig.system_prompt`.
+The system prompt is the competency prompt (see Section 10), set at construction time via `AgentConfig.system_prompt`. MCA prompts are rich and self-contained — they include all context the agent needs.
 
 ### 6.3 Perspective Assignment
 
@@ -264,7 +239,7 @@ def build_agent_tree(
 ```
 
 This function:
-1. Iterates through all levels and nodes using existing tree helpers
+1. Iterates through all levels and nodes using tree helpers
 2. Computes `children`, `siblings`, `parent` for each node
 3. Assigns `perspective` to leaf nodes
 4. Generates competency system prompt via `create_competency_prompt(role, perspective)`
@@ -373,9 +348,7 @@ Can be swapped for a better metric later via a `convergence_method` parameter.
 
 ## 9. State Design
 
-### 9.1 MCA State
-
-A new `MCAState` TypedDict for the flat MCA graph. The existing `State` in `graph.py` is unchanged — it continues to serve the legacy nested subgraph execution.
+### 9.1 State
 
 ```python
 class AgentRoundData(TypedDict, total=False):
@@ -402,7 +375,7 @@ class MCAState(TypedDict, total=False):
     converged: bool
     convergence_scores: list[float]     # Root similarity per round
 
-    # Final output (same keys as legacy mode)
+    # Final output
     final_response: str
     strange_loops: list[dict[str, str]]
 ```
@@ -412,7 +385,6 @@ class MCAState(TypedDict, total=False):
 - **`agent_history`** is a dict of lists, not a flat dict. Each agent's response history is indexed by round. This makes round-over-round comparison trivial.
 - **`AgentRoundData`** captures both the initial response and the post-lateral response for each agent each round. The `revised` flag indicates whether lateral communication actually changed anything — critical for evaluating whether lateral communication is adding value.
 - **`convergence_scores`** is a list of floats, one per round (starting from round 2). This gives a clear trajectory: is the system converging smoothly, oscillating, or stuck?
-- The final output fields (`final_response`, `strange_loops`) match the legacy `State` so that downstream consumers (TextArena, output JSON) work identically.
 
 ---
 
@@ -461,7 +433,7 @@ You make sense of what has emerged from below.
 
 ### 10.2 Round Prompt Functions
 
-Six new functions in `prompts.py`. All existing functions are unchanged.
+Six functions in `prompts.py`:
 
 | Function | Used By | Purpose |
 |---|---|---|
@@ -564,9 +536,9 @@ YOUR SYNTHESIS:
 
 ## 11. LangGraph Integration
 
-### 11.1 Graph Topology (MCA Mode)
+### 11.1 Graph Topology
 
-A single flat `StateGraph` with a conditional back-edge for the round loop. This replaces the nested subgraph pattern for MCA mode only.
+A single flat `StateGraph` with a conditional back-edge for the round loop:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -604,17 +576,7 @@ For `depth=3, cpp=2`:
 init → leaf_respond → leaf_lateral → observe_L2 → lateral_L2 → observe_root → signal_down → check_convergence → finalize
 ```
 
-### 11.2 Why a Flat Graph for MCA Mode
-
-The RFC's argument is correct: nested subgraphs were designed for single-pass down-up traversal. For iterative rounds where every agent re-enters every round:
-- Re-invoking compiled nested subgraphs each round adds overhead
-- Peer state sharing across nested subgraphs requires complex plumbing
-- A flat graph with Python loops inside node functions is simpler to debug and visualize
-- LLM calls are the bottleneck, not graph traversal
-
-The existing nested subgraph architecture is preserved for legacy mode. The choice of graph architecture is an implementation detail hidden behind `mca_mode`.
-
-### 11.3 Node Functions
+### 11.2 Node Functions
 
 Each graph node function iterates over the relevant agents. Example:
 
@@ -687,7 +649,7 @@ def leaf_lateral(state: MCAState) -> dict:
     return {"agent_history": updates}
 ```
 
-### 11.4 Convergence as Conditional Edge
+### 11.3 Convergence as Conditional Edge
 
 ```python
 def check_convergence(state: MCAState) -> dict:
@@ -724,7 +686,7 @@ builder.add_conditional_edges(
 )
 ```
 
-### 11.5 Finalize Node
+### 11.4 Finalize Node
 
 ```python
 def finalize(state: MCAState) -> dict:
@@ -732,7 +694,7 @@ def finalize(state: MCAState) -> dict:
     root_history = state["agent_history"][root_name]
     root_response = root_history[-1].get("lateral_response", root_history[-1]["response"])
 
-    # Apply strange loop if configured (reuse existing _apply_strange_loop)
+    # Apply strange loop if configured
     if strange_loop_count > 0:
         root_agent = agents[root_name]
         final_response, loops = _apply_strange_loop(
@@ -749,7 +711,7 @@ def finalize(state: MCAState) -> dict:
     }
 ```
 
-### 11.6 Recursion Limit
+### 11.5 Recursion Limit
 
 ```python
 num_graph_nodes = 2 + (2 * num_internal_levels) + 2 + 1  # init, leaf pair, internal pairs, signal+convergence, finalize
@@ -758,7 +720,7 @@ recursion_limit = max_rounds * (num_graph_nodes + 5)
 
 Minimum 50 to provide headroom.
 
-### 11.7 Future: Parallel LLM Calls
+### 11.6 Future: Parallel LLM Calls
 
 Within `leaf_respond` and `leaf_lateral`, agents at the same level are independent. The architecture supports `asyncio.gather()` for parallel invocation. LangGraph supports `async def` node functions natively. Deferred to follow-up.
 
@@ -770,7 +732,7 @@ This is the most important section. The entire redesign exists to test whether e
 
 ### 12.1 MCA Report
 
-Every MCA execution produces `mca_report.json` alongside `final_state.json`:
+Every execution produces `mca_report.json`:
 
 ```json
 {
@@ -870,40 +832,27 @@ The report data supports answering these questions:
 - Comparison: Run same task with `max_rounds=1` and `max_rounds=3`. Compare final output quality (human eval or LLM-as-judge).
 - If `max_rounds=1` output is just as good, the round-based model isn't adding value.
 
-**Q5: How does MCA compare to legacy mode?**
-- Comparison: Run same task in both modes. Compare output quality, diversity of perspectives, and depth of analysis.
-- This is the fundamental test. If legacy mode (simple decomposition + synthesis) produces equivalent output, MCA isn't earning its cost.
-
-### 12.3 Comparison Script
-
-A utility script `scripts/compare_modes.py` that runs a task in both modes and produces a side-by-side comparison:
-
-```bash
-poetry run python scripts/compare_modes.py \
-    --task "Explain the implications of quantum computing for cryptography" \
-    --cpp 3 --depth 2 --model gpt-4o-mini --max_rounds 3
-```
-
-Output: two `final_state.json` files, one `mca_report.json`, and a summary comparing:
-- Final response text (both modes)
-- Total LLM calls (both modes)
-- MCA-specific metrics (round count, revision rate, convergence trajectory)
+**Q5: Does MCA outperform a single-agent baseline?**
+- Comparison: Run same task with MCA and with a single LLM call using the same model. Compare output quality, diversity of perspectives, and depth of analysis.
+- This is the fundamental test. If a single agent produces equivalent output, MCA isn't earning its cost.
 
 ---
 
-## 13. API Changes
-
-All new parameters have defaults that preserve existing behavior.
+## 13. API
 
 ### 13.1 CLI (`main.py`)
 
 ```
---mca_mode                       Enable MCA execution mode (default: off)
---max_rounds N                   Max rounds for MCA convergence (default: 3)
+--task TASK                      The task to process (required)
+--child_per_parent N             Children per parent node (default: 3)
+--depth N                        Tree depth (default: 2)
+--model MODEL                    LLM model name (default: gpt-4o-mini)
+--max_rounds N                   Max rounds for convergence (default: 3)
 --convergence_threshold F        Jaccard similarity threshold 0-1 (default: 0.85)
 --enable_downward_signals        Enable parent-to-child signals (default: on)
 --no_downward_signals            Disable parent-to-child signals
 --perspectives P [P ...]         Custom perspectives for leaf agents
+--strange_loop_count N           Strange loop iterations at finalization (default: 0)
 ```
 
 ### 13.2 Programmatic (`run_strange_mca()`)
@@ -911,12 +860,15 @@ All new parameters have defaults that preserve existing behavior.
 ```python
 run_strange_mca(
     task="...",
-    mca_mode=False,                      # NEW — activate MCA execution
-    max_rounds=3,                        # NEW — MCA round cap
-    convergence_threshold=0.85,          # NEW — MCA convergence threshold
-    enable_downward_signals=True,        # NEW — parent-to-child signals
-    perspectives=None,                   # NEW — custom leaf perspectives
-    # ... all existing params unchanged ...
+    child_per_parent=3,
+    depth=2,
+    model="gpt-4o-mini",
+    max_rounds=3,
+    convergence_threshold=0.85,
+    enable_downward_signals=True,
+    perspectives=None,
+    strange_loop_count=0,
+    domain_specific_instructions="",
 )
 ```
 
@@ -924,12 +876,14 @@ run_strange_mca(
 
 ```python
 StrangeMCAAgent(
-    mca_mode=False,                      # NEW
-    max_rounds=3,                        # NEW
-    convergence_threshold=0.85,          # NEW
-    enable_downward_signals=True,        # NEW
-    perspectives=None,                   # NEW
-    # ... all existing params unchanged ...
+    child_per_parent=3,
+    depth=2,
+    model="gpt-4o-mini",
+    max_rounds=3,
+    convergence_threshold=0.85,
+    enable_downward_signals=True,
+    perspectives=None,
+    strange_loop_count=0,
 )
 ```
 
@@ -939,52 +893,28 @@ StrangeMCAAgent(
 
 For `cpp=3, depth=2` (4 agents: 1 root + 3 leaves):
 
-| Mode | Calls per unit | Total | Notes |
+| Configuration | Calls per round | Total | Notes |
 |------|---------------|-------|-------|
-| Legacy | — | 5 + N | 1 decompose + 3 leaf + 1 synthesize + N strange loops |
-| MCA, 1 round, signals on | 3 respond + 3 lateral + 1 observe + 1 signal = 8 | 8 + N | 1.6x legacy |
-| MCA, 3 rounds, signals on | 8 * 3 = 24 | 24 + N | 4.8x legacy |
-| MCA, 3 rounds, signals off | (3 + 3 + 1) * 3 = 21 | 21 + N | 4.2x legacy |
-| MCA, 1 round, signals off | 3 + 3 + 1 = 7 | 7 + N | 1.4x legacy |
+| 1 round, signals on | 3 respond + 3 lateral + 1 observe + 1 signal = 8 | 8 + N | N = strange loops |
+| 3 rounds, signals on | 8 * 3 = 24 | 24 + N | |
+| 3 rounds, signals off | (3 + 3 + 1) * 3 = 21 | 21 + N | |
+| 1 round, signals off | 3 + 3 + 1 = 7 | 7 + N | Minimal config |
 
 For `cpp=2, depth=3` (7 agents: 1 root + 2 internal + 4 leaves):
 
-| Mode | Calls per round | Total (3 rounds) | Notes |
+| Configuration | Calls per round | Total (3 rounds) | Notes |
 |------|----------------|-------------------|-------|
-| Legacy | — | 8 + N | 1 root decompose + 2 internal decompose + 4 leaf + 1 synthesize + N |
-| MCA, signals on | 4 respond + 4 lateral + 2 observe + 2 lateral + 1 observe + 3 signal = 16 | 48 + N | 6x legacy |
-| MCA, signals off | 4 + 4 + 2 + 2 + 1 = 13 | 39 + N | 4.9x legacy |
+| Signals on | 4 respond + 4 lateral + 2 observe + 2 lateral + 1 observe + 3 signal = 16 | 48 + N | |
+| Signals off | 4 + 4 + 2 + 2 + 1 = 13 | 39 + N | |
 
-The cost multiplier is the price of genuine multi-perspective iterative processing. Cost-sensitive configurations:
-- `max_rounds=1, enable_downward_signals=False`: ~1.4x legacy (minimal MCA)
-- `max_rounds=2, enable_downward_signals=True`: ~3.2x legacy (moderate)
-- `max_rounds=3, enable_downward_signals=True`: ~4.8x legacy (full)
-
----
-
-## 15. Backward Compatibility
-
-**Why keep the legacy mode:** This is an exploratory project testing a hypothesis. If MCA doesn't produce meaningfully better results, the legacy mode remains a working baseline. The cost of an `if mca_mode` branch is small; the cost of losing a working baseline during research is high.
-
-**What stays unchanged:**
-- All existing source files continue to work without modification when `mca_mode=False`
-- `State` TypedDict in `graph.py` is unchanged
-- `create_execution_graph()` and `run_execution_graph()` are unchanged
-- All existing prompt functions are unchanged
-- All existing tests pass without modification
-- `final_state.json` output format is unchanged in legacy mode
-
-**What's new (additive only):**
-- `MCAState` TypedDict alongside existing `State`
-- `create_mca_execution_graph()` alongside existing `create_execution_graph()`
-- New prompt functions alongside existing ones
-- New `AgentConfig` fields with defaults
-- New `Agent.invoke()` method alongside existing `run()`
-- `mca_report.json` output (MCA mode only)
+Cost-sensitive configurations:
+- `max_rounds=1, enable_downward_signals=False`: 7 calls (minimal)
+- `max_rounds=2, enable_downward_signals=True`: ~16 calls (moderate)
+- `max_rounds=3, enable_downward_signals=True`: ~24 calls (full)
 
 ---
 
-## 16. File-by-File Change Specification
+## 15. File-by-File Change Specification
 
 ### New Files
 
@@ -992,106 +922,107 @@ The cost multiplier is the price of genuine multi-perspective iterative processi
 |------|-------------|----------|
 | `src/strange_mca/convergence.py` | ~50 | `compute_jaccard_similarity()`, `check_convergence()` |
 | `tests/test_convergence.py` | ~60 | Jaccard similarity edge cases, convergence detection |
-| `scripts/compare_modes.py` | ~80 | Side-by-side legacy vs MCA comparison utility |
 
-### Modified Files
+### Replaced Files
 
-**`src/strange_mca/agents.py`** (~150 lines, up from 68)
-- `AgentConfig`: Add `depth`, `siblings`, `children`, `parent`, `perspective` fields. Add `is_leaf`, `is_root`, `role` properties. All new fields have defaults — existing construction unchanged.
-- `Agent`: Add `invoke(prompt: str) -> str` method.
+**`src/strange_mca/agents.py`** (~120 lines)
+- `AgentConfig`: Replace with topology-aware model (`depth`, `siblings`, `children`, `parent`, `perspective`, `is_leaf`, `is_root`, `role`).
+- `Agent`: Single `invoke(prompt)` method.
 - `PERSPECTIVES`: List of 8 perspective strings.
-- `build_agent_tree(cpp, depth, model_name, perspectives) -> dict[str, Agent]`: New function.
+- `build_agent_tree(cpp, depth, model_name, perspectives) -> dict[str, Agent]`: Builds all agents with competency prompts.
 
-**`src/strange_mca/prompts.py`** (~350 lines, up from 175)
-- Keep all existing functions unchanged.
-- Add: `create_competency_prompt()`, `create_initial_response_prompt()`, `create_lateral_prompt()`, `create_observation_prompt()`, `create_signal_prompt()`, `create_signal_response_prompt()`.
+**`src/strange_mca/prompts.py`** (~250 lines)
+- Replace existing decomposition/synthesis prompts with MCA prompts: `create_competency_prompt()`, `create_initial_response_prompt()`, `create_lateral_prompt()`, `create_observation_prompt()`, `create_signal_prompt()`, `create_signal_response_prompt()`.
+- Keep `create_strange_loop_prompt()` — used in finalization.
 
-**`src/strange_mca/graph.py`** (~750 lines, up from 522)
-- Keep all existing code unchanged: `State`, `merge_dicts`, tree helpers, `create_agent_subgraph()`, `create_execution_graph()`, `run_execution_graph()`, `_apply_strange_loop()`, `_parse_subtask_for_child()`.
-- Add: `AgentRoundData`, `MCAState`, `create_mca_execution_graph()`, `run_mca_execution_graph()`, all MCA node functions (`init_node`, `leaf_respond`, `leaf_lateral`, `observe_level`, `lateral_level`, `observe_root`, `signal_down`, `check_convergence`, `finalize`).
+**`src/strange_mca/graph.py`** (~400 lines)
+- Replace nested subgraph architecture with flat `StateGraph`.
+- `MCAState`, `AgentRoundData` as the state model.
+- `create_execution_graph()` builds the flat graph with round loop.
+- `run_execution_graph()` invokes the graph and returns results.
+- Node functions: `init_node`, `leaf_respond`, `leaf_lateral`, `observe_level`, `lateral_level`, `observe_root`, `signal_down`, `check_convergence`, `finalize`.
+- Keep tree helper functions: `parse_node_name`, `make_node_name`, `get_children`, `is_leaf`, `is_root`, `count_nodes_at_level`, `total_nodes`.
 
-**`src/strange_mca/run_strange_mca.py`** (~200 lines, up from 162)
-- `run_strange_mca()` gains: `mca_mode`, `max_rounds`, `convergence_threshold`, `enable_downward_signals`, `perspectives`.
-- When `mca_mode=True`, calls `create_mca_execution_graph()` and `run_mca_execution_graph()` instead of legacy functions.
-- Writes `mca_report.json` alongside `final_state.json` when in MCA mode.
+**`src/strange_mca/run_strange_mca.py`** (~120 lines)
+- `run_strange_mca()` with MCA parameters.
+- Calls `build_agent_tree()`, `create_execution_graph()`, `run_execution_graph()`.
+- Writes `mca_report.json` output.
 
-**`src/strange_mca/main.py`** (~260 lines, up from 231)
-- Add argparse arguments: `--mca_mode`, `--max_rounds`, `--convergence_threshold`, `--enable_downward_signals`/`--no_downward_signals`, `--perspectives`.
-- Pass new args to `run_strange_mca()`.
-- Print MCA summary metrics when in MCA mode.
+**`src/strange_mca/main.py`** (~150 lines)
+- CLI with MCA arguments: `--max_rounds`, `--convergence_threshold`, `--enable_downward_signals`/`--no_downward_signals`, `--perspectives`.
+- Print summary metrics after execution.
 
-**`examples/arena/strangemca_textarena.py`** (~110 lines, up from 96)
-- `StrangeMCAAgent.__init__()` gains: `mca_mode`, `max_rounds`, `convergence_threshold`, `enable_downward_signals`, `perspectives`.
-- Pass through to `run_strange_mca()`.
+**`examples/arena/strangemca_textarena.py`** (~100 lines)
+- `StrangeMCAAgent` with MCA parameters passed through to `run_strange_mca()`.
 
-**`src/strange_mca/visualization.py`** (~280 lines, up from 242)
-- `visualize_agent_tree()`: Add dashed edges between siblings to show lateral channels when MCA mode.
+**`src/strange_mca/visualization.py`** (~280 lines)
+- `visualize_agent_tree()`: Show lateral edges between siblings.
 
 ### Test Changes
 
 | File | Change |
 |------|--------|
-| `tests/test_agents.py` | Add tests for new `AgentConfig` properties, `Agent.invoke()`, `build_agent_tree()`. Existing tests unchanged. |
-| `tests/test_prompts.py` | Add tests for 6 new prompt functions. Existing tests unchanged. |
-| `tests/test_graph.py` | Add tests for `MCAState`, `create_mca_execution_graph()` structure, MCA node functions. Existing tests unchanged. |
-| `tests/test_run_strange_mca.py` | Add tests for MCA mode parameters. Existing tests unchanged. |
-| `tests/test_main.py` | Add tests for new CLI args. Existing tests unchanged. |
-| `tests/test_strangemca_textarena.py` | Add tests for new params. Existing tests unchanged. |
+| `tests/test_agents.py` | Rewrite for `AgentConfig` properties, `Agent.invoke()`, `build_agent_tree()`. |
+| `tests/test_prompts.py` | Rewrite for 6 MCA prompt functions + strange loop prompt. |
+| `tests/test_graph.py` | Rewrite for `MCAState`, flat graph structure, node functions. |
+| `tests/test_run_strange_mca.py` | Rewrite for MCA parameters and execution. |
+| `tests/test_main.py` | Rewrite for new CLI args. |
+| `tests/test_strangemca_textarena.py` | Rewrite for new params. |
 
 ---
 
-## 17. Implementation Phases
+## 16. Implementation Phases
 
 ### Phase 1: Infrastructure
 
 - Create `convergence.py` with `compute_jaccard_similarity()` and `check_convergence()`
-- Extend `AgentConfig` with new fields and properties
-- Add `Agent.invoke()` method
+- Rewrite `AgentConfig` with topology fields and properties
+- Rewrite `Agent` class with `invoke()` method
 - Add `PERSPECTIVES` list and `build_agent_tree()` function
-- Write `test_convergence.py` and extend `test_agents.py`
-- **Verification**: `poetry run pytest` — all existing + new tests pass
+- Write `test_convergence.py` and `test_agents.py`
+- **Verification**: `poetry run pytest` — new tests pass
 
 ### Phase 2: Prompts
 
-- Add 6 new prompt functions to `prompts.py`
-- Write tests for all new prompts in `test_prompts.py`
+- Replace decomposition/synthesis prompts with MCA prompts in `prompts.py`
+- Keep `create_strange_loop_prompt()`
+- Write tests for all prompt functions in `test_prompts.py`
 - **Verification**: `poetry run pytest` — all tests pass
 
-### Phase 3: MCA Execution Graph
+### Phase 3: Execution Graph
 
-- Add `AgentRoundData`, `MCAState` to `graph.py`
-- Implement `create_mca_execution_graph()` with all node functions
-- Implement `run_mca_execution_graph()`
+- Rewrite `graph.py` with flat `StateGraph`, `MCAState`, `AgentRoundData`
+- Implement `create_execution_graph()` with all node functions
+- Implement `run_execution_graph()`
 - Wire: `init → leaf_respond → leaf_lateral → [observe/lateral per internal level] → observe_root → signal_down → check_convergence → [loop or finalize]`
-- Write MCA graph tests in `test_graph.py`
-- **Verification**: `poetry run pytest` — all tests pass. MCA graph can be constructed with mocked agents.
+- Write graph tests in `test_graph.py`
+- **Verification**: `poetry run pytest` — all tests pass. Graph can be constructed with mocked agents.
 
 ### Phase 4: Integration
 
-- Update `run_strange_mca.py` with MCA parameters and mode branching
-- Update `main.py` with new CLI flags
-- Update TextArena adapter with new params
+- Rewrite `run_strange_mca.py` to wire everything together
+- Rewrite `main.py` with new CLI
+- Update TextArena adapter
 - Write `mca_report.json` output logic
 - Update integration tests
 - **Verification**: `poetry run pytest` — all tests pass. Smoke test with real LLM:
   ```
-  poetry run python -m src.strange_mca.main --task "Explain recursion" --depth 2 --cpp 3 --mca_mode --max_rounds 2
+  poetry run python -m src.strange_mca.main --task "Explain recursion" --depth 2 --child_per_parent 3 --max_rounds 2
   ```
 
 ### Phase 5: Observability & Evaluation
 
-- Create `scripts/compare_modes.py`
 - Update `visualization.py` for lateral edges
 - Run evaluation protocol (Section 12.2) on 3-5 diverse tasks
 - Document findings
-- **Verification**: Full test suite passes. Comparison script produces valid output. MCA report JSON validates.
+- **Verification**: Full test suite passes. MCA report JSON validates.
 
 ---
 
-## 18. Risks
+## 17. Risks
 
 ### LLM cost scales with rounds and tree size
-Each round invokes every agent at least twice (respond + lateral). For deep trees with multiple rounds, costs compound. **Mitigation**: `max_rounds` defaults to 3. `enable_downward_signals=False` reduces calls per round. `max_rounds=1` with no signals is only ~1.4x legacy cost for quick experiments.
+Each round invokes every agent at least twice (respond + lateral). For deep trees with multiple rounds, costs compound. **Mitigation**: `max_rounds` defaults to 3. `enable_downward_signals=False` reduces calls per round. `max_rounds=1` with no signals is only 7 calls for a depth-2 tree.
 
 ### Convergence may not occur
 Agents may oscillate, especially on creative or open-ended tasks. **Mitigation**: `max_rounds` guarantees termination. Root-only convergence checking (vs. all-agent) is more likely to stabilize since the root sees the big picture. The threshold (0.85) is permissive — it detects stabilization, not identity.
@@ -1110,22 +1041,18 @@ Assigning perspectives to leaf agents is arguably a form of top-down direction �
 
 ---
 
-## 19. Verification Plan
+## 18. Verification Plan
 
 After each phase:
 
-1. `poetry run pytest` — all existing + new tests pass
+1. `poetry run pytest` — all tests pass
 2. `./scripts/lint.sh` — passes Ruff and Black
-3. Legacy smoke test: `poetry run python -m src.strange_mca.main --task "Explain recursion" --depth 2 --child_per_parent 2` — output unchanged
-4. MCA smoke test (Phase 4+): `poetry run python -m src.strange_mca.main --task "Explain recursion" --depth 2 --child_per_parent 3 --mca_mode --max_rounds 2`
-5. Inspect `output/*/final_state.json` — verify format matches legacy when `mca_mode=False`
-6. Inspect `output/*/mca_report.json` — verify round history, convergence scores, revision rates
-7. TextArena (Phase 4+): `poetry run python examples/arena/strange_basic_twoplayer.py` — works in both modes
-8. Comparison (Phase 5): `poetry run python scripts/compare_modes.py --task "..." --cpp 3 --depth 2` — produces valid comparison
+3. Smoke test (Phase 4+): `poetry run python -m src.strange_mca.main --task "Explain recursion" --depth 2 --child_per_parent 3 --max_rounds 2`
+4. Inspect `output/*/mca_report.json` — verify round history, convergence scores, revision rates
 
 ---
 
-## 20. Open Questions
+## 19. Open Questions
 
 1. **Should the lateral prompt encourage consensus or productive disagreement?** The current prompt leans toward "maintain your perspective" (productive disagreement). This may prevent convergence. Testing will reveal whether the balance needs adjusting.
 

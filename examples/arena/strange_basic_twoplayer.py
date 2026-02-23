@@ -68,6 +68,8 @@ def main():
             child_per_parent=strange_mca_config["child_per_parent"],
             depth=strange_mca_config["depth"],
             model=strange_mca_config["model"],
+            max_rounds=2,
+            enable_downward_signals=True,
             viz=False,
             print_details=True,
             domain_specific_instructions=domain_specific_instructions,

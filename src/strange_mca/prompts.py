@@ -1,76 +1,220 @@
 """
-Prompt-related functions for the Strange MCA system.
+Prompt functions for the emergent MCA system.
 
-This module contains functions for creating various prompts used in the system,
-as well as parsing responses from those prompts.
+Provides prompts for competency (system prompts), initial response, lateral
+communication, parent observation, downward signals, and strange loop
+self-reflection.
 """
 
 import re
+from typing import Optional
 
 
-def create_task_decomposition_prompt(
-    task: str, context: str, child_nodes: list[str]
+def create_competency_prompt(role: str, perspective: str = "") -> str:
+    """Create a competency system prompt for an agent based on its role.
+
+    Args:
+        role: One of 'specialist', 'coordinator', or 'integrator'.
+        perspective: The agent's unique perspective (specialists only).
+
+    Returns:
+        A system prompt string.
+    """
+    if role == "specialist":
+        return (
+            f"You are a specialist analyst in a collaborative research team. Your unique "
+            f"perspective is: {perspective}.\n\n"
+            f"Your goal is to contribute the most valuable insight you can from your area "
+            f"of expertise. You are NOT being assigned a subtask — you independently analyze "
+            f"the full problem through your lens.\n\n"
+            f"When communicating with peers, maintain your perspective while being open to "
+            f"integration. Be concise and substantive."
+        )
+    elif role == "coordinator":
+        return (
+            "You are a mid-level coordinator in a collaborative research team. You observe "
+            "the outputs of several specialist analysts (your team).\n\n"
+            "Your goal is to identify emergent patterns, contradictions, and synergies in "
+            "their work — things that arise from the COMBINATION of perspectives that no "
+            "individual captured alone. You do NOT assign tasks or tell your team what to do. "
+            "You observe and synthesize.\n\n"
+            "When communicating with peer coordinators, share your synthesis and look for "
+            "cross-team patterns. Focus on what emerges from the combination."
+        )
+    else:  # integrator
+        return (
+            "You are the lead integrator of a collaborative research team. You observe the "
+            "outputs of all coordinators and their teams.\n\n"
+            "Your goal is to produce a coherent, holistic response that captures the best "
+            "emergent insights from across the entire team. You do NOT direct the process. "
+            "You make sense of what has emerged from below."
+        )
+
+
+def create_initial_response_prompt(
+    task: str,
+    perspective: str,
+    round_num: int,
+    previous_response: Optional[str] = None,
+    parent_signal: Optional[str] = None,
 ) -> str:
-    """Create a prompt for task decomposition.
+    """Create a prompt for a leaf agent's independent response.
 
     Args:
-        task: The original task to decompose.
-        context: The context for the agent that will decompose the task.
-        child_nodes: List of child node names that will receive the subtasks.
+        task: The original task.
+        perspective: The agent's perspective.
+        round_num: Current round number.
+        previous_response: Agent's response from previous round (round 2+).
+        parent_signal: Downward signal from parent (round 2+, if enabled).
 
     Returns:
-        A prompt for task decomposition.
+        A prompt string.
     """
-    child_nodes_str = "\n".join([f"- {node}" for node in child_nodes])
+    parts = [f"TASK: {task}"]
 
-    return f"""
+    if round_num > 1 and previous_response:
+        parts.append(
+            f"\nYOUR PREVIOUS RESPONSE (round {round_num - 1}):\n{previous_response}"
+        )
 
-{context}
+    if round_num > 1 and parent_signal:
+        parts.append(
+            f"\nSIGNAL FROM YOUR COORDINATOR:\n{parent_signal}\n\n"
+            "This signal highlights areas your coordinator noticed. You may incorporate "
+            "it or stay with your current analysis if you believe it's stronger."
+        )
 
-Your task is to break down the following task into subtasks for your team members:
+    if round_num == 1:
+        parts.append(
+            f"\nAnalyze this task from your {perspective} perspective. "
+            "Provide your independent analysis."
+        )
+    else:
+        parts.append(
+            f"\nProvide your updated analysis from your {perspective} perspective, "
+            "building on your previous response and any signals received."
+        )
 
-{task}
-
-You have the following team members that need assignments:
-{child_nodes_str}
-
-Each team member works independently (they cannot see each other's work).
-For each, create a specific subtask that:
-1. Is self-contained and actionable without depending on other members' outputs
-2. Contributes meaningfully to the overall task
-
-Format your response with one subtask per team member, using their exact name as the prefix:
-
-{child_nodes[0]}: [Subtask description for this team member]
-{child_nodes[1] if len(child_nodes) > 1 else "[Next team member]"}: [Subtask description for this team member]
-...and so on for all team members.
-
-Make sure each team member has exactly one subtask assigned to them."""
+    return "\n".join(parts)
 
 
-def create_synthesis_prompt(child_responses: dict[str, str]) -> str:
-    """Create a prompt for synthesizing responses from child nodes.
+def create_lateral_prompt(
+    task: str,
+    own_response: str,
+    peer_responses: dict[str, str],
+    round_num: int,
+) -> str:
+    """Create a prompt for lateral communication with peers.
 
     Args:
-        child_responses: Dictionary mapping child node names to their responses.
+        task: The original task.
+        own_response: The agent's own response this round.
+        peer_responses: Dict mapping peer names to their responses.
+        round_num: Current round number.
 
     Returns:
-        A prompt for synthesizing responses.
+        A prompt string.
     """
-    formatted_responses = "\n\n".join(
-        [f"Agent {child}: {response}" for child, response in child_responses.items()]
+    parts = [
+        f"You previously responded to this task:\n\nTASK: {task}\n\n"
+        f"YOUR RESPONSE:\n{own_response}\n\n"
+        "Your peer specialists have also responded. Here are their perspectives:\n"
+    ]
+
+    for name, response in peer_responses.items():
+        parts.append(f"--- {name} ---\n{response}\n")
+
+    parts.append(
+        "\nConsider your peers' contributions. You should:\n"
+        "- MAINTAIN your unique perspective — do not abandon your viewpoint\n"
+        "- IDENTIFY contradictions or tensions between your response and others\n"
+        "- FILL GAPS that others may have missed from your vantage point\n"
+        "- SHARPEN your contribution by noting where it adds something others don't cover\n"
+        "- NOTE any genuine disagreements — disagreement is valuable, not a problem to fix\n\n"
+        "Provide your revised response. If your original response already captures "
+        "your best contribution given what your peers have said, you may restate it "
+        "with minor adjustments."
     )
 
-    return f"""Synthesize the following responses from your team members:
+    return "\n".join(parts)
 
-{formatted_responses}
 
-Your task is to:
-1. Integrate the key insights from each response
-2. Resolve any contradictions or inconsistencies
-3. Provide a coherent and concise answer
+def create_observation_prompt(
+    task: str,
+    child_responses: dict[str, str],
+    own_previous: Optional[str] = None,
+    round_num: int = 1,
+) -> str:
+    """Create a prompt for a parent agent to observe children's outputs.
 
-Format your response as a well-structured summary."""
+    Args:
+        task: The original task.
+        child_responses: Dict mapping child names to their latest responses.
+        own_previous: Parent's own synthesis from the previous round.
+        round_num: Current round number.
+
+    Returns:
+        A prompt string.
+    """
+    parts = [
+        f"You are observing the outputs of your team in response to:\n\nTASK: {task}\n\n"
+        "TEAM RESPONSES:\n"
+    ]
+
+    for name, response in child_responses.items():
+        parts.append(f"--- {name} ---\n{response}\n")
+
+    if own_previous:
+        parts.append(
+            f"\nYOUR PREVIOUS SYNTHESIS (round {round_num - 1}):\n{own_previous}\n"
+        )
+
+    parts.append(
+        "\nSynthesize what you observe. Focus specifically on:\n"
+        "1. What EMERGES from the combination of these perspectives that no individual "
+        "captured alone?\n"
+        "2. What contradictions or tensions exist between perspectives? Are these "
+        "productive tensions (revealing genuine complexity) or errors?\n"
+        "3. What is MISSING — what question does this collective response fail to address?\n\n"
+        "Do NOT simply summarize each person's contribution. Your value is in seeing "
+        "patterns, connections, and gaps across the whole."
+    )
+
+    return "\n".join(parts)
+
+
+def create_signal_prompt(
+    task: str,
+    child_responses: dict[str, str],
+    own_synthesis: str,
+) -> str:
+    """Create a prompt for generating a downward signal to children.
+
+    Args:
+        task: The original task.
+        child_responses: Dict mapping child names to their responses.
+        own_synthesis: The parent's synthesis.
+
+    Returns:
+        A prompt string.
+    """
+    parts = [
+        f"Based on your synthesis of your team's work on:\n\nTASK: {task}\n\n"
+        "You notice the following gaps or tensions that your team might address "
+        "in their next round:\n\n"
+        "Generate a brief (2-3 sentence) signal to your team. This should:\n"
+        "- Highlight blind spots or underexplored areas\n"
+        "- Note productive tensions worth developing further\n"
+        "- Be SUGGESTIVE, not DIRECTIVE — your team decides how to respond\n\n"
+        "TEAM RESPONSES:\n"
+    ]
+
+    for name, response in child_responses.items():
+        parts.append(f"--- {name} ---\n{response}\n")
+
+    parts.append(f"\nYOUR SYNTHESIS:\n{own_synthesis}")
+
+    return "\n".join(parts)
 
 
 def create_strange_loop_prompt(
@@ -81,6 +225,7 @@ def create_strange_loop_prompt(
     Args:
         original_task: The original task to complete.
         tentative_response: The tentative response from the team.
+        domain_specific_instructions: Optional domain-specific instructions.
 
     Returns:
         A prompt for the strange loop.
@@ -135,7 +280,10 @@ def parse_strange_loop_response(response: str) -> str:
     if not response:
         return ""
 
-    # Try to find the final response section using regex pattern matching
+    # Both regex and fallback extract the FIRST "Final Response:" section.
+    # The regex uses a non-greedy match (.*?) which captures the first occurrence.
+    # The fallback's line-by-line parser breaks out of the loop after finding the
+    # first asterisk-delimited block following "Final Response:", yielding the same result.
     pattern = r"Final Response:\s*\n\*{10,}\s*\n(.*?)\n\*{10,}"
     match = re.search(pattern, response, re.DOTALL)
     if match:

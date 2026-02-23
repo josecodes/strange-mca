@@ -1,115 +1,40 @@
-"""LangGraph implementation of the multiagent system using nested subgraphs.
+"""Flat LangGraph implementation of the emergent MCA system.
 
-Each agent is represented as a self-contained subgraph with:
-- A 'down' node for task decomposition (non-leaf) or execution (leaf)
-- Child subgraphs for each child agent (non-leaf only)
-- An 'up' node for synthesizing children's responses (non-leaf only)
-
-The graph structure mirrors the conceptual agent tree - no separate NetworkX graph needed.
+A single flat StateGraph with round-based bottom-up processing:
+  init → leaf_respond → leaf_lateral → [observe/lateral per internal level]
+  → observe_root → signal_down → check_convergence → [loop or finalize] → END
 """
 
+import copy
 import logging
-from typing import Annotated, Any, Optional, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 
-from src.strange_mca.agents import Agent, AgentConfig
+from src.strange_mca.agents import Agent
+from src.strange_mca.convergence import compute_jaccard_similarity
 from src.strange_mca.logging_utils import (
     DetailedLoggingCallbackHandler,
     setup_detailed_logging,
 )
 from src.strange_mca.prompts import (
+    create_initial_response_prompt,
+    create_lateral_prompt,
+    create_observation_prompt,
+    create_signal_prompt,
     create_strange_loop_prompt,
-    create_synthesis_prompt,
-    create_task_decomposition_prompt,
     parse_strange_loop_response,
 )
+from src.strange_mca.tree_helpers import (
+    count_nodes_at_level,
+    generate_all_nodes,
+    is_leaf,
+    make_node_name,
+    parse_node_name,
+)
 
-# Set up logging
 logger = logging.getLogger("strange_mca")
-
-
-# =============================================================================
-# Tree Helper Functions
-# =============================================================================
-
-
-def parse_node_name(node_name: str) -> tuple[int, int]:
-    """Parse 'L{level}N{num}' into (level, num).
-
-    Args:
-        node_name: Node name like 'L1N1', 'L2N3', etc.
-
-    Returns:
-        Tuple of (level, node_number).
-
-    Example:
-        >>> parse_node_name('L2N3')
-        (2, 3)
-    """
-    parts = node_name.split("N")
-    level = int(parts[0][1:])
-    num = int(parts[1])
-    return level, num
-
-
-def make_node_name(level: int, num: int) -> str:
-    """Create node name from level and node number.
-
-    Args:
-        level: Tree level (1 = root).
-        num: Node number within level (1-indexed).
-
-    Returns:
-        Node name like 'L1N1'.
-    """
-    return f"L{level}N{num}"
-
-
-def get_children(node_name: str, cpp: int, depth: int) -> list[str]:
-    """Get child node names for a given node.
-
-    Args:
-        node_name: Parent node name.
-        cpp: Children per parent.
-        depth: Total tree depth.
-
-    Returns:
-        List of child node names, empty if leaf.
-
-    Example:
-        >>> get_children('L1N1', 2, 3)
-        ['L2N1', 'L2N2']
-        >>> get_children('L2N2', 2, 3)
-        ['L3N3', 'L3N4']
-    """
-    level, num = parse_node_name(node_name)
-    if level >= depth:
-        return []
-    child_level = level + 1
-    start = (num - 1) * cpp + 1
-    return [make_node_name(child_level, start + i) for i in range(cpp)]
-
-
-def is_leaf(level: int, depth: int) -> bool:
-    """Check if a node at given level is a leaf."""
-    return level == depth
-
-
-def is_root(level: int) -> bool:
-    """Check if a node at given level is root."""
-    return level == 1
-
-
-def count_nodes_at_level(level: int, cpp: int) -> int:
-    """Count nodes at a given level."""
-    return cpp ** (level - 1)
-
-
-def total_nodes(cpp: int, depth: int) -> int:
-    """Calculate total nodes in tree."""
-    return sum(count_nodes_at_level(level, cpp) for level in range(1, depth + 1))
 
 
 # =============================================================================
@@ -118,7 +43,13 @@ def total_nodes(cpp: int, depth: int) -> int:
 
 
 def merge_dicts(left: dict, right: dict) -> dict:
-    """Merge two dictionaries, with right overwriting left."""
+    """Merge two dictionaries, with right overwriting left.
+
+    WARNING: This is a shallow merge — keys in ``right`` completely replace the
+    corresponding keys in ``left``.  Graph nodes that update ``agent_history``
+    must therefore return **complete** agent history lists for every agent they
+    touch, not partial updates, to avoid data loss.
+    """
     if left is None:
         return right or {}
     if right is None:
@@ -126,52 +57,39 @@ def merge_dicts(left: dict, right: dict) -> dict:
     return {**left, **right}
 
 
-class State(TypedDict, total=False):
-    """State for an agent subgraph.
-
-    Note: depth and cpp are build-time constants captured in closures,
-    not runtime state that needs to be passed through.
-    """
-
-    # The task for this agent (passed from parent or initial input)
-    task: str
-
-    # Original task (for context, passed to all descendants)
-    original_task: str
-
-    # This agent's response (set by down node for leaves, up node for non-leaves)
+class AgentRoundData(TypedDict, total=False):
     response: str
+    lateral_response: str
+    revised: bool
+    signal_sent: str
+    signal_received: str
 
-    # Decomposition output from down pass (non-leaf nodes only)
-    decomposition: str
 
-    # Tasks assigned to each child (maps child name -> task string)
-    child_tasks: Annotated[dict[str, str], merge_dicts]
-
-    # Child responses stored as a dict with merge reducer
-    child_responses: Annotated[dict[str, str], merge_dicts]
-
-    # For root node only (set after strange loop)
+class MCAState(TypedDict, total=False):
+    original_task: str
+    agent_history: Annotated[dict, merge_dicts]
+    current_round: int
+    max_rounds: int
+    convergence_threshold: float
+    enable_downward_signals: bool
+    converged: bool
+    convergence_scores: list[float]
     final_response: str
     strange_loops: list[dict[str, str]]
 
-    # Legacy compatibility: nodes dict for result format
-    nodes: dict[str, dict[str, str]]
-    current_node: str
-
 
 # =============================================================================
-# Subgraph Construction
+# Strange Loop Helper
 # =============================================================================
 
 
 def _apply_strange_loop(
-    agent,
+    agent: Agent,
     response: str,
     original_task: str,
     strange_loop_count: int,
     domain_instructions: str,
-) -> tuple[str, list[dict[str, str]] | None]:
+) -> tuple[str, list[dict[str, str]]]:
     """Apply strange loop processing to a response.
 
     Args:
@@ -182,234 +100,458 @@ def _apply_strange_loop(
         domain_instructions: Domain-specific instructions for the last iteration.
 
     Returns:
-        Tuple of (final_response, strange_loops_list or None if no loops run).
+        Tuple of (final_response, strange_loops_list).
     """
     local_count = strange_loop_count
     if domain_instructions:
         local_count += 1
 
     if local_count == 0:
-        return response, None
+        return response, []
 
     loops = []
     for i in range(local_count):
-        # Apply domain instructions on last iteration
-        if i == local_count - 1:
+        if i == local_count - 1 and domain_instructions:
             loop_prompt = create_strange_loop_prompt(
-                original_task,
-                response,
-                domain_instructions,
+                original_task, response, domain_instructions
             )
         else:
-            loop_prompt = create_strange_loop_prompt(
-                original_task,
-                response,
-            )
-        loop_response = agent.run(task=loop_prompt)
+            loop_prompt = create_strange_loop_prompt(original_task, response)
+        loop_response = agent.invoke(loop_prompt)
         loops.append({"prompt": loop_prompt, "response": loop_response})
         response = parse_strange_loop_response(loop_response)
 
     return response, loops
 
 
-def _parse_subtask_for_child(decomposition_response: str, child_name: str) -> str:
-    """Extract subtask for a specific child from decomposition response.
-
-    Args:
-        decomposition_response: The parent's decomposition containing subtasks.
-        child_name: The child node name to extract subtask for.
-
-    Returns:
-        The subtask string for this child.
-    """
-    prefix = f"{child_name}: "
-    for line in decomposition_response.split("\n"):
-        if line.startswith(prefix):
-            return line[len(prefix) :].strip()
-    # Fallback: return empty string if not found
-    logger.warning(f"No subtask found for {child_name} in decomposition response")
-    return ""
+# =============================================================================
+# Graph Construction
+# =============================================================================
 
 
-def create_agent_subgraph(
-    node_name: str,
+def create_execution_graph(
+    agents: dict[str, Agent],
     cpp: int,
     depth: int,
-    model_name: str,
-    domain_instructions: str = "",
+    max_rounds: int = 3,
+    convergence_threshold: float = 0.85,
+    enable_downward_signals: bool = True,
     strange_loop_count: int = 0,
-):
-    """Create a subgraph for a single agent node.
+    domain_specific_instructions: str = "",
+) -> Any:
+    """Create a flat LangGraph StateGraph for MCA execution.
 
     Args:
-        node_name: The agent's name (e.g., 'L1N1').
+        agents: Dict mapping node names to Agent instances.
         cpp: Children per parent.
         depth: Total tree depth.
-        model_name: LLM model name to use.
-        domain_instructions: Domain-specific instructions for strange loop.
-        strange_loop_count: Number of strange loop iterations at root.
+        max_rounds: Maximum number of rounds.
+        convergence_threshold: Jaccard similarity threshold for convergence.
+        enable_downward_signals: Whether to enable parent-to-child signals.
+        strange_loop_count: Number of strange loop iterations at finalization.
+        domain_specific_instructions: Domain-specific instructions for strange loop.
 
     Returns:
-        Compiled LangGraph for this agent.
+        Compiled LangGraph.
     """
-    level, num = parse_node_name(node_name)
-    is_leaf_node = is_leaf(level, depth)
-    is_root_node = is_root(level)
+    if depth < 2:
+        raise ValueError("depth must be >= 2 (need at least a root and leaf level)")
 
-    # Create agent for this node
-    config = AgentConfig(name=node_name, level=level, node_number=num)
-    agent = Agent(config, model_name=model_name)
+    # Precompute topology
+    all_nodes = generate_all_nodes(cpp, depth)
+    leaf_names = [n for n in all_nodes if is_leaf(parse_node_name(n)[0], depth)]
+    root_name = "L1N1"
 
-    builder = StateGraph(State)
+    # Compute internal levels (between root and leaves, exclusive)
+    # Process bottom-up: highest level first so children are observed before parents
+    internal_levels = list(range(depth - 1, 1, -1)) if depth > 2 else []
 
-    # Get children for this node (empty list if leaf)
-    children = get_children(node_name, cpp, depth)
+    builder = StateGraph(MCAState)
 
     # -------------------------------------------------------------------------
-    # DOWN node: decompose (non-leaf) or execute (leaf)
+    # init node
     # -------------------------------------------------------------------------
-    def down_node(state: State) -> dict[str, Any]:
-        task = state["task"]
-        logger.debug(f"[{node_name}] Down pass with task: {task[:100]}...")
+    def init_node(state: MCAState) -> dict:
+        history = {}
+        for name in all_nodes:
+            history[name] = []
+        return {
+            "agent_history": history,
+            "current_round": 1,
+            "max_rounds": max_rounds,
+            "convergence_threshold": convergence_threshold,
+            "enable_downward_signals": enable_downward_signals,
+            "converged": False,
+            "convergence_scores": [],
+        }
 
-        if is_leaf_node:
-            # Leaf: execute the task directly
-            response = agent.run(task=task)
-            logger.debug(f"[{node_name}] Leaf response: {response[:100]}...")
-            return {"response": response}
-        else:
-            # Non-leaf: decompose into subtasks for children
-            child_nodes_str = ", ".join(children)
-            context = f"You are coordinating a task across {len(children)} agents: {child_nodes_str}."
-            decomposition_prompt = create_task_decomposition_prompt(
-                task, context, children
+    builder.add_node("init", init_node)
+
+    # -------------------------------------------------------------------------
+    # leaf_respond node
+    # -------------------------------------------------------------------------
+    def leaf_respond(state: MCAState) -> dict:
+        round_num = state["current_round"]
+        task = state["original_task"]
+        updates = {}
+
+        for name in leaf_names:
+            agent = agents[name]
+            history = list(state["agent_history"].get(name, []))
+            previous = None
+            parent_signal = None
+
+            if round_num > 1 and history:
+                last_round = history[-1]
+                previous = last_round.get(
+                    "lateral_response", last_round.get("response")
+                )
+                if state.get("enable_downward_signals"):
+                    parent_signal = last_round.get("signal_received")
+
+            prompt = create_initial_response_prompt(
+                task,
+                agent.config.perspective,
+                round_num,
+                previous_response=previous,
+                parent_signal=parent_signal,
             )
-            response = agent.run(task=decomposition_prompt)
-            logger.debug(f"[{node_name}] Decomposition response: {response[:100]}...")
-            # Store both response (for parsing) and decomposition (for output trace)
-            return {"response": response, "decomposition": response}
+            response = agent.invoke(prompt)
+            round_data: AgentRoundData = {"response": response, "revised": False}
+            updates[name] = history + [round_data]
 
-    builder.add_node("down", down_node)
+        return {"agent_history": updates}
 
-    if is_leaf_node and not is_root_node:
-        # Non-root leaf: down -> END (response already set)
-        builder.add_edge("down", END)
-    elif is_leaf_node and is_root_node:
-        # Root that is also a leaf (depth=1): needs strange loop processing
-        def up_node_root_leaf(state: State) -> dict[str, Any]:
-            response = state["response"]
-            original_task = state.get("original_task", state["task"])
+    builder.add_node("leaf_respond", leaf_respond)
 
-            # Apply strange loop processing
-            final_response, loops = _apply_strange_loop(
-                agent, response, original_task, strange_loop_count, domain_instructions
+    # -------------------------------------------------------------------------
+    # leaf_lateral node
+    # -------------------------------------------------------------------------
+    def leaf_lateral(state: MCAState) -> dict:
+        round_num = state["current_round"]
+        task = state["original_task"]
+        updates = {}
+
+        for name in leaf_names:
+            agent = agents[name]
+            history = copy.deepcopy(state["agent_history"][name])
+            own_response = history[-1]["response"]
+
+            peer_responses = {}
+            for sibling in agent.config.siblings:
+                sib_history = state["agent_history"][sibling]
+                peer_responses[sibling] = sib_history[-1]["response"]
+
+            if not peer_responses:
+                history[-1]["lateral_response"] = own_response
+                history[-1]["revised"] = False
+                updates[name] = history
+                continue
+
+            prompt = create_lateral_prompt(
+                task, own_response, peer_responses, round_num
             )
+            lateral_response = agent.invoke(prompt)
 
-            result: dict[str, Any] = {
-                "response": response,
-                "final_response": final_response,
-            }
-            if loops:
-                result["strange_loops"] = loops
-            return result
+            revised = lateral_response.strip() != own_response.strip()
+            history[-1]["lateral_response"] = lateral_response
+            history[-1]["revised"] = revised
+            updates[name] = history
 
-        builder.add_node("up", up_node_root_leaf)
-        builder.add_edge("down", "up")
-        builder.add_edge("up", END)
-    else:
-        # Non-leaf: down -> children (sequential) -> up
+        return {"agent_history": updates}
 
-        # Create child subgraphs and add as nodes
-        for child_name in children:
-            child_subgraph = create_agent_subgraph(
-                child_name,
-                cpp,
-                depth,
-                model_name,
-                domain_instructions,
-                strange_loop_count=0,  # Only root has strange loops
-            )
+    builder.add_node("leaf_lateral", leaf_lateral)
 
-            # Create wrapper function to invoke child with transformed state
-            def make_invoke_child(child: str, sg):
-                def invoke_child(state: State) -> dict[str, Any]:
-                    # Parse subtask for this child from parent's decomposition
-                    subtask = _parse_subtask_for_child(state["response"], child)
+    # -------------------------------------------------------------------------
+    # Internal level observe/lateral nodes
+    # -------------------------------------------------------------------------
+    for int_level in internal_levels:
+        level_node_count = count_nodes_at_level(int_level, cpp)
 
-                    # Include original task context
-                    original_task = state.get("original_task", state["task"])
-                    child_task = f"Original task context:\n{original_task}\n\nYour specific assignment:\n{subtask}"
+        def make_observe_fn(level):
+            def observe_level(state: MCAState) -> dict:
+                round_num = state["current_round"]
+                task = state["original_task"]
+                updates = {}
+                node_count = count_nodes_at_level(level, cpp)
 
-                    # Invoke child subgraph (depth/cpp are captured at build time, not passed through state)
-                    child_result = sg.invoke(
-                        {
-                            "task": child_task,
-                            "original_task": original_task,
-                        }
+                for node_idx in range(1, node_count + 1):
+                    name = make_node_name(level, node_idx)
+                    agent = agents[name]
+                    history = list(state["agent_history"].get(name, []))
+
+                    # Gather children's latest responses
+                    child_responses = {}
+                    for child_name in agent.config.children:
+                        child_hist = state["agent_history"][child_name]
+                        if child_hist:
+                            last = child_hist[-1]
+                            child_responses[child_name] = last.get(
+                                "lateral_response", last.get("response", "")
+                            )
+
+                    own_previous = None
+                    if history:
+                        last = history[-1]
+                        own_previous = last.get(
+                            "lateral_response", last.get("response")
+                        )
+
+                    prompt = create_observation_prompt(
+                        task, child_responses, own_previous, round_num
+                    )
+                    response = agent.invoke(prompt)
+                    round_data: AgentRoundData = {
+                        "response": response,
+                        "revised": False,
+                    }
+                    updates[name] = history + [round_data]
+
+                return {"agent_history": updates}
+
+            return observe_level
+
+        def make_lateral_fn(level):
+            def lateral_level(state: MCAState) -> dict:
+                round_num = state["current_round"]
+                task = state["original_task"]
+                updates = {}
+                node_count = count_nodes_at_level(level, cpp)
+
+                for node_idx in range(1, node_count + 1):
+                    name = make_node_name(level, node_idx)
+                    agent = agents[name]
+                    history = copy.deepcopy(state["agent_history"][name])
+                    own_response = history[-1]["response"]
+
+                    peer_responses = {}
+                    for sibling in agent.config.siblings:
+                        sib_history = state["agent_history"][sibling]
+                        if sib_history:
+                            peer_responses[sibling] = sib_history[-1]["response"]
+
+                    if not peer_responses:
+                        history[-1]["lateral_response"] = own_response
+                        history[-1]["revised"] = False
+                        updates[name] = history
+                        continue
+
+                    prompt = create_lateral_prompt(
+                        task, own_response, peer_responses, round_num
+                    )
+                    lateral_response = agent.invoke(prompt)
+
+                    revised = lateral_response.strip() != own_response.strip()
+                    history[-1]["lateral_response"] = lateral_response
+                    history[-1]["revised"] = revised
+                    updates[name] = history
+
+                return {"agent_history": updates}
+
+            return lateral_level
+
+        observe_node_name = f"observe_L{int_level}"
+        lateral_node_name = f"lateral_L{int_level}"
+        builder.add_node(observe_node_name, make_observe_fn(int_level))
+        builder.add_node(lateral_node_name, make_lateral_fn(int_level))
+
+    # -------------------------------------------------------------------------
+    # observe_root node
+    # -------------------------------------------------------------------------
+    def observe_root(state: MCAState) -> dict:
+        round_num = state["current_round"]
+        task = state["original_task"]
+        root_agent = agents[root_name]
+        history = list(state["agent_history"].get(root_name, []))
+
+        # Gather children's latest responses
+        child_responses = {}
+        for child_name in root_agent.config.children:
+            child_hist = state["agent_history"][child_name]
+            if child_hist:
+                last = child_hist[-1]
+                child_responses[child_name] = last.get(
+                    "lateral_response", last.get("response", "")
+                )
+
+        own_previous = None
+        if history:
+            last = history[-1]
+            own_previous = last.get("lateral_response", last.get("response"))
+
+        prompt = create_observation_prompt(
+            task, child_responses, own_previous, round_num
+        )
+        response = root_agent.invoke(prompt)
+        round_data: AgentRoundData = {"response": response, "revised": False}
+
+        return {"agent_history": {root_name: history + [round_data]}}
+
+    builder.add_node("observe_root", observe_root)
+
+    # -------------------------------------------------------------------------
+    # signal_down node
+    # -------------------------------------------------------------------------
+    def signal_down(state: MCAState) -> dict:
+        if not state.get("enable_downward_signals"):
+            return {}
+
+        task = state["original_task"]
+        updates = {}
+
+        # Gather all non-leaf agents that need to send signals
+        non_leaf_names = [
+            n for n in all_nodes if not is_leaf(parse_node_name(n)[0], depth)
+        ]
+
+        for name in non_leaf_names:
+            agent = agents[name]
+            # Use updates if this agent was already written (e.g., as a child
+            # receiving signal_received), otherwise fall back to state.
+            history = copy.deepcopy(updates.get(name, state["agent_history"][name]))
+            if not history:
+                continue
+
+            # Get agent's latest synthesis
+            last = history[-1]
+            own_synthesis = last.get("lateral_response", last.get("response", ""))
+
+            # Gather children's responses
+            child_responses = {}
+            for child_name in agent.config.children:
+                child_hist = state["agent_history"][child_name]
+                if child_hist:
+                    c_last = child_hist[-1]
+                    child_responses[child_name] = c_last.get(
+                        "lateral_response", c_last.get("response", "")
                     )
 
-                    # Store child's task and response (both use merge reducer)
-                    return {
-                        "child_tasks": {child: child_task},
-                        "child_responses": {child: child_result["response"]},
-                    }
+            prompt = create_signal_prompt(task, child_responses, own_synthesis)
+            signal = agent.invoke(prompt)
 
-                return invoke_child
+            # Store signal_sent on the parent
+            history[-1]["signal_sent"] = signal
+            updates[name] = history
 
-            builder.add_node(
-                f"child_{child_name}", make_invoke_child(child_name, child_subgraph)
-            )
-
-        # Wire: down -> first child
-        builder.add_edge("down", f"child_{children[0]}")
-
-        # Wire: children sequentially
-        for i in range(len(children) - 1):
-            builder.add_edge(f"child_{children[i]}", f"child_{children[i + 1]}")
-
-        # -------------------------------------------------------------------------
-        # UP node: synthesize children's responses
-        # -------------------------------------------------------------------------
-        def up_node(state: State) -> dict[str, Any]:
-            # Gather children's responses from child_responses dict
-            stored_responses = state.get("child_responses", {})
-            child_responses = {}
-            for child in children:
-                child_responses[child] = stored_responses.get(child, "")
-                if not child_responses[child]:
-                    logger.warning(f"[{node_name}] No response from child {child}")
-
-            # Synthesize
-            synthesis_prompt = create_synthesis_prompt(child_responses)
-            response = agent.run(task=synthesis_prompt)
-            logger.debug(f"[{node_name}] Synthesis response: {response[:100]}...")
-
-            result: dict[str, Any] = {"response": response}
-
-            # Strange loop at root
-            if is_root_node:
-                original_task = state.get("original_task", state["task"])
-                final_response, loops = _apply_strange_loop(
-                    agent,
-                    response,
-                    original_task,
-                    strange_loop_count,
-                    domain_instructions,
+            # Store signal_received on each child — use updates if the child
+            # was already written, to avoid overwriting prior data.
+            for child_name in agent.config.children:
+                child_hist = copy.deepcopy(
+                    updates.get(child_name, state["agent_history"].get(child_name, []))
                 )
-                result["final_response"] = final_response
-                if loops:
-                    result["strange_loops"] = loops
+                if child_hist:
+                    child_hist[-1]["signal_received"] = signal
+                    updates[child_name] = child_hist
 
-            return result
+        return {"agent_history": updates} if updates else {}
 
-        builder.add_node("up", up_node)
+    builder.add_node("signal_down", signal_down)
 
-        # Wire: last child -> up -> END
-        builder.add_edge(f"child_{children[-1]}", "up")
-        builder.add_edge("up", END)
+    # -------------------------------------------------------------------------
+    # check_convergence node
+    # -------------------------------------------------------------------------
+    def check_convergence(state: MCAState) -> dict:
+        round_num = state["current_round"]
+        threshold = state["convergence_threshold"]
+        max_r = state["max_rounds"]
 
-    builder.set_entry_point("down")
-    return builder.compile()
+        root_history = state["agent_history"].get(root_name, [])
+        scores = list(state.get("convergence_scores", []))
+
+        converged = False
+
+        if len(root_history) >= 2:
+            prev = root_history[-2].get(
+                "lateral_response", root_history[-2].get("response", "")
+            )
+            curr = root_history[-1].get(
+                "lateral_response", root_history[-1].get("response", "")
+            )
+            score = compute_jaccard_similarity(prev, curr)
+            scores.append(score)
+            converged = score >= threshold
+
+        if round_num >= max_r:
+            converged = True
+
+        return {
+            "converged": converged,
+            "convergence_scores": scores,
+            "current_round": round_num + 1,
+        }
+
+    builder.add_node("check_convergence", check_convergence)
+
+    # -------------------------------------------------------------------------
+    # finalize node
+    # -------------------------------------------------------------------------
+    def finalize(state: MCAState) -> dict:
+        root_history = state["agent_history"].get(root_name, [])
+        root_response = ""
+        if root_history:
+            last = root_history[-1]
+            root_response = last.get("lateral_response", last.get("response", ""))
+
+        if strange_loop_count > 0 or domain_specific_instructions:
+            root_agent = agents[root_name]
+            final_response, loops = _apply_strange_loop(
+                root_agent,
+                root_response,
+                state["original_task"],
+                strange_loop_count,
+                domain_specific_instructions,
+            )
+        else:
+            final_response = root_response
+            loops = []
+
+        result: dict = {"final_response": final_response}
+        if loops:
+            result["strange_loops"] = loops
+        return result
+
+    builder.add_node("finalize", finalize)
+
+    # -------------------------------------------------------------------------
+    # Wiring
+    # -------------------------------------------------------------------------
+    builder.set_entry_point("init")
+    builder.add_edge("init", "leaf_respond")
+    builder.add_edge("leaf_respond", "leaf_lateral")
+
+    if internal_levels:
+        # leaf_lateral → first internal level observe
+        builder.add_edge("leaf_lateral", f"observe_L{internal_levels[0]}")
+
+        # Chain internal levels
+        for i, level in enumerate(internal_levels):
+            builder.add_edge(f"observe_L{level}", f"lateral_L{level}")
+            if i + 1 < len(internal_levels):
+                builder.add_edge(
+                    f"lateral_L{level}", f"observe_L{internal_levels[i + 1]}"
+                )
+            else:
+                builder.add_edge(f"lateral_L{level}", "observe_root")
+    else:
+        builder.add_edge("leaf_lateral", "observe_root")
+
+    builder.add_edge("observe_root", "signal_down")
+    builder.add_edge("signal_down", "check_convergence")
+
+    builder.add_conditional_edges(
+        "check_convergence",
+        lambda state: "finalize" if state.get("converged", False) else "leaf_respond",
+        {"leaf_respond": "leaf_respond", "finalize": "finalize"},
+    )
+
+    builder.add_edge("finalize", END)
+
+    # Compute recursion limit
+    # init+leaf_respond+leaf_lateral, internal pairs, root+signal+convergence, finalize
+    num_graph_nodes = 3 + len(internal_levels) * 2 + 3 + 1
+    recursion_limit = max(50, max_rounds * (num_graph_nodes + 5))
+
+    return builder.compile(), recursion_limit
 
 
 # =============================================================================
@@ -417,105 +559,41 @@ def create_agent_subgraph(
 # =============================================================================
 
 
-def create_execution_graph(
-    child_per_parent: int = 3,
-    depth: int = 2,
-    model_name: str = "gpt-3.5-turbo",
-    langgraph_viz_dir: Optional[str] = None,
-    domain_specific_instructions: Optional[str] = "",
-    strange_loop_count: int = 0,
-):
-    """Create a LangGraph for the multiagent system.
-
-    This creates a nested subgraph structure where each agent is represented
-    as a self-contained subgraph.
-
-    Args:
-        child_per_parent: Number of children each non-leaf node has.
-        depth: Number of levels in the tree.
-        model_name: LLM model name to use.
-        langgraph_viz_dir: If provided, generate visualization in this directory.
-        domain_specific_instructions: Domain-specific instructions for strange loop.
-        strange_loop_count: Number of strange loop iterations.
-
-    Returns:
-        Compiled LangGraph.
-    """
-    logger.info(
-        f"Creating execution graph with {child_per_parent} children per parent and {depth} levels"
-    )
-
-    # Create the root subgraph (which recursively creates all descendants)
-    compiled_graph = create_agent_subgraph(
-        "L1N1",  # root
-        child_per_parent,
-        depth,
-        model_name,
-        domain_specific_instructions or "",
-        strange_loop_count,
-    )
-
-    logger.info("Compiled LangGraph successfully")
-
-    # Generate visualization if requested
-    if langgraph_viz_dir:
-        from src.strange_mca.visualization import visualize_langgraph
-
-        visualize_langgraph(compiled_graph, langgraph_viz_dir, child_per_parent, depth)
-
-    return compiled_graph
-
-
 def run_execution_graph(
-    execution_graph,
+    graph,
     task: str,
+    recursion_limit: int = 50,
     log_level: str = "warn",
     only_local_logs: bool = False,
-    langgraph_viz_dir: Optional[str] = None,
 ) -> dict:
     """Run the execution graph on a task.
 
     Args:
-        execution_graph: The compiled graph to run.
+        graph: The compiled graph to run.
         task: The task to perform.
+        recursion_limit: Recursion limit for LangGraph.
         log_level: Logging level ("warn", "info", or "debug").
         only_local_logs: If True, only show logs from strange_mca logger.
-        langgraph_viz_dir: Directory where visualization was generated (unused).
 
     Returns:
         Result dictionary containing response and metadata.
     """
-    # Set up logging
     setup_detailed_logging(log_level=log_level, only_local_logs=only_local_logs)
-
-    # Create callback handler for detailed logging
     callback_handler = DetailedLoggingCallbackHandler()
 
     logger.info(f"Running execution graph with task: {task[:100]}...")
 
-    # Initialize state
-    initial_state: State = {
-        "task": task,
+    initial_state: MCAState = {
         "original_task": task,
     }
 
-    try:
-        # Calculate recursion limit based on expected depth
-        # Each subgraph has multiple nodes, so we need generous limits
-        recursion_limit = 100
+    config = RunnableConfig(
+        callbacks=[callback_handler], recursion_limit=recursion_limit
+    )
 
-        config = RunnableConfig(
-            callbacks=[callback_handler], recursion_limit=recursion_limit
-        )
+    result = graph.invoke(initial_state, config=config)
 
-        result = execution_graph.invoke(initial_state, config=config)
+    if "final_response" not in result:
+        result["final_response"] = ""
 
-        # Ensure backward-compatible result format
-        if "final_response" not in result:
-            result["final_response"] = result.get("response", "")
-
-        return result
-
-    except Exception as e:
-        logger.error(f"Error during graph execution: {e}")
-        raise
+    return result

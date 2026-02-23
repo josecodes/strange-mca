@@ -6,74 +6,25 @@ from typing import Any, Optional
 
 import graphviz
 
-# Set up logger
+from src.strange_mca.tree_helpers import (
+    count_nodes_at_level,
+    generate_all_nodes,
+    get_children,
+    get_parent,
+    get_siblings,
+    parse_node_name,
+)
+
 logger = logging.getLogger("strange_mca")
-
-
-# =============================================================================
-# Tree Helper Functions (copied from graph.py for independence)
-# =============================================================================
-
-
-def _parse_node_name(node_name: str) -> tuple[int, int]:
-    """Parse 'L{level}N{num}' into (level, num)."""
-    parts = node_name.split("N")
-    level = int(parts[0][1:])
-    num = int(parts[1])
-    return level, num
-
-
-def _make_node_name(level: int, num: int) -> str:
-    """Create node name from level and node number."""
-    return f"L{level}N{num}"
-
-
-def _get_children(node_name: str, cpp: int, depth: int) -> list[str]:
-    """Get child node names for a given node."""
-    level, num = _parse_node_name(node_name)
-    if level >= depth:
-        return []
-    child_level = level + 1
-    start = (num - 1) * cpp + 1
-    return [_make_node_name(child_level, start + i) for i in range(cpp)]
-
-
-def _get_parent(node_name: str, cpp: int) -> Optional[str]:
-    """Get parent node name."""
-    level, num = _parse_node_name(node_name)
-    if level == 1:
-        return None
-    parent_num = (num - 1) // cpp + 1
-    return _make_node_name(level - 1, parent_num)
-
-
-def _count_nodes_at_level(level: int, cpp: int) -> int:
-    """Count nodes at a given level."""
-    return cpp ** (level - 1)
-
-
-def _generate_all_nodes(cpp: int, depth: int) -> list[str]:
-    """Generate all node names in level order."""
-    nodes = []
-    for level in range(1, depth + 1):
-        count = _count_nodes_at_level(level, cpp)
-        for node_num in range(1, count + 1):
-            nodes.append(_make_node_name(level, node_num))
-    return nodes
-
-
-# =============================================================================
-# Visualization Functions
-# =============================================================================
 
 
 def visualize_agent_tree(
     cpp: int,
     depth: int,
-    output_path: str = None,
+    output_path: Optional[str] = None,
     format: str = "png",
 ) -> Optional[str]:
-    """Visualize the agent tree structure.
+    """Visualize the agent tree structure with lateral edges.
 
     Args:
         cpp: Children per parent.
@@ -84,45 +35,58 @@ def visualize_agent_tree(
     Returns:
         The path to the saved visualization.
     """
-    # Ensure the output directory exists
     if output_path:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    # Create a new graph
     dot = graphviz.Digraph(
         "Agent Tree",
-        comment="Visualization of the multiagent system",
+        comment="Visualization of the MCA agent hierarchy",
         format=format,
     )
 
-    # Generate all nodes
-    all_nodes = _generate_all_nodes(cpp, depth)
+    all_nodes = generate_all_nodes(cpp, depth)
 
-    # Add nodes
     for node_name in all_nodes:
-        level, _ = _parse_node_name(node_name)
+        level, num = parse_node_name(node_name)
 
-        # Create a label with the agent's name and level
-        label = f"{node_name}\nLevel {level}"
-
-        # Use different colors for different levels
         if level == 1:
             color = "lightblue"
+            role = "Integrator"
+            label = f"{node_name}\n{role}"
         elif level == depth:
             color = "lightgreen"
+            role = "Specialist"
+            label = f"{node_name}\n{role}"
         else:
             color = "lightyellow"
+            role = "Coordinator"
+            label = f"{node_name}\n{role}"
 
-        # Add the node
         dot.node(node_name, label, style="filled", fillcolor=color)
 
-    # Add edges
+    # Add parent-child edges (solid)
     for node_name in all_nodes:
-        parent = _get_parent(node_name, cpp)
+        parent = get_parent(node_name, cpp)
         if parent:
             dot.edge(parent, node_name)
 
-    # Render the graph
+    # Add lateral edges (dashed) between siblings
+    seen_pairs = set()
+    for node_name in all_nodes:
+        siblings = get_siblings(node_name, cpp, depth)
+        for sibling in siblings:
+            pair = tuple(sorted([node_name, sibling]))
+            if pair not in seen_pairs:
+                seen_pairs.add(pair)
+                dot.edge(
+                    node_name,
+                    sibling,
+                    style="dashed",
+                    dir="none",
+                    color="gray",
+                    constraint="false",
+                )
+
     if output_path:
         try:
             output_file = dot.render(output_path, cleanup=True)
@@ -146,11 +110,10 @@ def print_agent_tree(cpp: int, depth: int) -> None:
     """
 
     def print_node(node_name: str, indent: int = 0) -> None:
-        """Print a node and its children recursively."""
-        level, _ = _parse_node_name(node_name)
+        level, _ = parse_node_name(node_name)
         print(f"{'  ' * indent}└─ {node_name} (Level {level})")
 
-        for child in _get_children(node_name, cpp, depth):
+        for child in get_children(node_name, cpp, depth):
             print_node(child, indent + 1)
 
     print("Agent Tree:")
@@ -164,13 +127,12 @@ def visualize_langgraph(
     depth: int = 2,
     filename: str = "execution_graph_lg",
 ) -> Optional[str]:
-    """Visualize the agent tree structure (since nested subgraphs don't visualize well).
-
-    This creates a visualization of the logical agent tree structure,
-    which mirrors the nested subgraph hierarchy.
+    """Visualize the agent tree structure.
 
     Args:
-        graph: The compiled LangGraph (unused, kept for API compatibility).
+        graph: The compiled LangGraph. Reserved for future use when actual
+            graph introspection is implemented. Currently unused because
+            nested subgraphs don't produce clean visualizations.
         output_dir: Directory to save the visualization.
         cpp: Children per parent.
         depth: Total tree depth.
@@ -179,59 +141,68 @@ def visualize_langgraph(
     Returns:
         The path to the saved visualization file, or None if visualization failed.
     """
-    # Create directory if it doesn't exist
+    _ = graph  # Reserved for future graph introspection
     os.makedirs(output_dir, exist_ok=True)
-
-    # Create output path
     output_path = os.path.join(output_dir, filename)
 
     try:
-        # Create a new Graphviz graph
         dot = graphviz.Digraph(
             "Execution Graph",
-            comment="Visualization of the agent tree structure",
+            comment="Visualization of the MCA agent tree structure",
             format="png",
         )
 
-        # Set graph attributes
         dot.attr(rankdir="TB", size="10,10", ratio="fill")
         dot.attr("node", shape="box", style="filled", fontname="Arial", fontsize="10")
         dot.attr("edge", arrowsize="0.7", fontname="Arial", fontsize="9")
 
-        # Add title
-        total = sum(_count_nodes_at_level(level, cpp) for level in range(1, depth + 1))
+        total = sum(count_nodes_at_level(level, cpp) for level in range(1, depth + 1))
         dot.attr(
-            label=f"Agent Tree\nDepth: {depth}, CPP: {cpp}\nTotal Agents: {total}",
+            label=f"MCA Agent Tree\nDepth: {depth}, CPP: {cpp}\nTotal Agents: {total}",
             fontsize="14",
             fontname="Arial Bold",
         )
 
-        # Generate all nodes
-        all_nodes = _generate_all_nodes(cpp, depth)
+        all_nodes = generate_all_nodes(cpp, depth)
 
-        # Add nodes with appropriate styling
         for node_name in all_nodes:
-            level, _ = _parse_node_name(node_name)
+            level, _ = parse_node_name(node_name)
 
             if level == 1:
-                color = "#e6f7ff"  # Light blue (root)
-                label = f"{node_name}\n(Root)"
+                color = "#e6f7ff"
+                label = f"{node_name}\n(Integrator)"
             elif level == depth:
-                color = "#e6ffe6"  # Light green (leaf)
-                label = f"{node_name}\n(Leaf)"
+                color = "#e6ffe6"
+                label = f"{node_name}\n(Specialist)"
             else:
-                color = "#fff2e6"  # Light orange (internal)
-                label = f"{node_name}\n(Internal)"
+                color = "#fff2e6"
+                label = f"{node_name}\n(Coordinator)"
 
             dot.node(node_name, label, style="filled", fillcolor=color)
 
-        # Add edges
+        # Parent-child edges
         for node_name in all_nodes:
-            parent = _get_parent(node_name, cpp)
+            parent = get_parent(node_name, cpp)
             if parent:
                 dot.edge(parent, node_name, dir="forward")
 
-        # Render the graph
+        # Lateral edges
+        seen_pairs = set()
+        for node_name in all_nodes:
+            siblings = get_siblings(node_name, cpp, depth)
+            for sibling in siblings:
+                pair = tuple(sorted([node_name, sibling]))
+                if pair not in seen_pairs:
+                    seen_pairs.add(pair)
+                    dot.edge(
+                        node_name,
+                        sibling,
+                        style="dashed",
+                        dir="none",
+                        color="gray",
+                        constraint="false",
+                    )
+
         output_file = dot.render(output_path, cleanup=True)
         logger.info(f"Agent tree visualization saved to {output_file}")
         return output_file
