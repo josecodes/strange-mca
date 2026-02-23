@@ -1,0 +1,122 @@
+[
+  {
+    "id": "piano_tuners_chicago",
+    "question": "How many piano tuners are there in Chicago?",
+    "reference_answer": 225,
+    "unit": "piano tuners",
+    "category": "population-derived",
+    "source": "Classic Fermi problem. Estimates typically range 100-500."
+  },
+  {
+    "id": "golf_balls_school_bus",
+    "question": "How many golf balls can fit inside a school bus?",
+    "reference_answer": 500000,
+    "unit": "golf balls",
+    "category": "physical",
+    "source": "Based on bus volume ~40m^3 and golf ball volume ~40cm^3 with ~60% packing efficiency."
+  },
+  {
+    "id": "gas_stations_us",
+    "question": "How many gas stations are there in the United States?",
+    "reference_answer": 150000,
+    "unit": "gas stations",
+    "category": "population-derived",
+    "source": "US Census Bureau and GasBuddy data. Approximately 145,000-160,000."
+  },
+  {
+    "id": "cells_human_body",
+    "question": "How many cells are in the human body?",
+    "reference_answer": 37000000000000,
+    "unit": "cells",
+    "category": "biological",
+    "source": "Bianconi et al. (2013). Approximately 3.7 x 10^13."
+  },
+  {
+    "id": "grains_sand_earth",
+    "question": "How many grains of sand are on Earth?",
+    "reference_answer": 7.5e18,
+    "unit": "grains of sand",
+    "category": "physical",
+    "source": "University of Hawaii estimate. Approximately 7.5 x 10^18."
+  },
+  {
+    "id": "us_gdp",
+    "question": "What is the annual GDP of the United States in dollars?",
+    "reference_answer": 27000000000000,
+    "unit": "dollars",
+    "category": "economic",
+    "source": "World Bank 2024 data. Approximately $27 trillion."
+  },
+  {
+    "id": "windows_manhattan",
+    "question": "How many windows are there in Manhattan?",
+    "reference_answer": 50000000,
+    "unit": "windows",
+    "category": "engineering",
+    "source": "Estimates range 40-60 million based on building counts and average windows per building."
+  },
+  {
+    "id": "hair_on_head",
+    "question": "How many hairs are on a human head?",
+    "reference_answer": 100000,
+    "unit": "hairs",
+    "category": "biological",
+    "source": "Dermatology references cite 80,000-120,000 for a full head of hair."
+  },
+  {
+    "id": "flights_per_day_us",
+    "question": "How many commercial flights take off in the US each day?",
+    "reference_answer": 45000,
+    "unit": "flights",
+    "category": "engineering",
+    "source": "FAA data. Approximately 45,000 flights per day."
+  },
+  {
+    "id": "tennis_balls_room",
+    "question": "How many tennis balls can fit in this room (a standard 5m x 4m x 3m room)?",
+    "reference_answer": 500000,
+    "unit": "tennis balls",
+    "category": "physical",
+    "source": "Room volume 60m^3, tennis ball ~0.000134m^3, ~64% packing efficiency."
+  },
+  {
+    "id": "teachers_us",
+    "question": "How many school teachers are there in the United States?",
+    "reference_answer": 3700000,
+    "unit": "teachers",
+    "category": "population-derived",
+    "source": "National Center for Education Statistics. Approximately 3.7 million."
+  },
+  {
+    "id": "water_lake_michigan",
+    "question": "How many liters of water are in Lake Michigan?",
+    "reference_answer": 4.9e15,
+    "unit": "liters",
+    "category": "physical",
+    "source": "NOAA data. Volume approximately 4,918 km^3 = 4.9 x 10^15 liters."
+  },
+  {
+    "id": "heartbeats_lifetime",
+    "question": "How many times does a human heart beat in a lifetime?",
+    "reference_answer": 2500000000,
+    "unit": "heartbeats",
+    "category": "biological",
+    "source": "~72 bpm x 60 min x 24 hr x 365 days x 75 years ≈ 2.8 billion."
+  },
+  {
+    "id": "pizzas_per_year_us",
+    "question": "How many pizzas are consumed in the US per year?",
+    "reference_answer": 3000000000,
+    "unit": "pizzas",
+    "category": "population-derived",
+    "source": "USDA and industry estimates. Approximately 3 billion pizzas per year."
+  },
+  {
+    "id": "weight_atmosphere",
+    "question": "What is the total mass of Earth's atmosphere in kilograms?",
+    "reference_answer": 5.15e18,
+    "unit": "kilograms",
+    "category": "physical",
+    "source": "Standard atmospheric pressure x Earth surface area. Approximately 5.15 x 10^18 kg."
+  }
+]
