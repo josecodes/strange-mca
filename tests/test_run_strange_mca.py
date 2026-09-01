@@ -43,6 +43,205 @@ def test_build_mca_report():
     assert report["summary_metrics"]["per_agent_revision_counts"]["L2N1"] == 1
     assert report["summary_metrics"]["per_agent_revision_counts"]["L2N2"] == 0
 
+    # Phase metrics computed because config carries cpp and depth
+    phase = report["summary_metrics"]["phase_analysis"]
+    # Siblings "leaf 1 revised" vs "leaf 2": intersection {leaf}, union 4 tokens
+    assert phase["final_mean_leaf_sibling_similarity"] == 0.25
+    assert phase["final_cross_group_similarity"] is None  # only one leaf group
+    # No convergence scores -> convergence unmeasurable -> unknown phase
+    assert phase["genuinely_converged"] is None
+    assert phase["phase_classification"] == "unknown"
+    assert report["rounds"][0]["phase_metrics"]["sibling_similarity_by_group"] == {
+        "L1N1": 0.25
+    }
+
+
+def test_build_mca_report_no_phase_without_topology():
+    """Phase analysis is omitted when config lacks cpp/depth."""
+    result = {
+        "agent_history": {"L1N1": [{"response": "synth"}]},
+        "converged": True,
+        "convergence_scores": [],
+        "final_response": "final",
+    }
+    report = build_mca_report(result, "Test", {})
+
+    assert "phase_analysis" not in report["summary_metrics"]
+    assert "phase_metrics" not in report["rounds"][0]
+
+
+def test_build_mca_report_phase_classification_multi_round():
+    """Two-round run: trajectories, stability, and classification computed."""
+    result = {
+        "agent_history": {
+            "L1N1": [
+                {"response": "root response one"},
+                {"response": "root response two"},
+            ],
+            "L2N1": [
+                {"response": "alpha beta"},
+                {"response": "alpha beta"},
+            ],
+            "L2N2": [
+                {"response": "gamma delta"},
+                {"response": "gamma delta"},
+            ],
+        },
+        "convergence_scores": [0.9],
+        "converged": True,
+        "final_response": "root response two",
+    }
+    config = {"cpp": 2, "depth": 2, "convergence_threshold": 0.85}
+
+    report = build_mca_report(result, "Test task", config)
+    phase = report["summary_metrics"]["phase_analysis"]
+
+    # Siblings are fully disjoint in both rounds
+    assert phase["mean_leaf_sibling_similarity_trajectory"] == [0.0, 0.0]
+    assert phase["final_mean_leaf_sibling_similarity"] == 0.0
+    # Leaves identical across rounds; the root is excluded from stability
+    assert phase["mean_agent_stability"] == 1.0
+    # Final score 0.9 >= threshold 0.85 -> genuine convergence
+    assert phase["genuinely_converged"] is True
+    # Converged with diverse siblings -> the target phase
+    assert phase["phase_classification"] == "converged_hierarchical"
+    assert len(report["rounds"]) == 2
+    assert all("phase_metrics" in rd for rd in report["rounds"])
+
+
+def test_build_mca_report_round_cap_not_genuine_convergence():
+    """The max_rounds cap (converged=True, low score) must not classify as converged."""
+    result = {
+        "agent_history": {
+            "L1N1": [
+                {"response": "the deadlock between perspectives persists"},
+                {"response": "the deadlock between perspectives remains"},
+            ],
+            "L2N1": [
+                {"response": "alpha beta"},
+                {"response": "alpha beta"},
+            ],
+            "L2N2": [
+                {"response": "gamma delta"},
+                {"response": "gamma delta"},
+            ],
+        },
+        # Root round-over-round similarity 4/6 — below the 0.85 threshold
+        "convergence_scores": [round(4 / 6, 3)],
+        "converged": True,  # forced by hitting max_rounds
+        "final_response": "the deadlock between perspectives remains",
+    }
+    config = {"cpp": 2, "depth": 2, "convergence_threshold": 0.85}
+
+    report = build_mca_report(result, "Test task", config)
+    phase = report["summary_metrics"]["phase_analysis"]
+
+    assert phase["genuinely_converged"] is False
+    # Non-root agents fully settled (root excluded from stability) while the
+    # root score stayed below threshold -> stuck (glassy signature)
+    assert phase["mean_agent_stability"] == 1.0
+    assert phase["phase_classification"] == "stuck"
+
+
+def test_build_mca_report_oscillating_when_leaves_unstable():
+    """Leaves still changing content while root unconverged -> oscillating."""
+    result = {
+        "agent_history": {
+            "L1N1": [
+                {"response": "one thing entirely"},
+                {"response": "another matter altogether"},
+            ],
+            "L2N1": [
+                {"response": "alpha beta"},
+                {"response": "epsilon zeta"},
+            ],
+            "L2N2": [
+                {"response": "gamma delta"},
+                {"response": "eta theta"},
+            ],
+        },
+        "convergence_scores": [0.0],
+        "converged": True,  # forced by hitting max_rounds
+        "final_response": "another matter altogether",
+    }
+    config = {"cpp": 2, "depth": 2, "convergence_threshold": 0.85}
+
+    report = build_mca_report(result, "Test task", config)
+    phase = report["summary_metrics"]["phase_analysis"]
+
+    assert phase["genuinely_converged"] is False
+    assert phase["mean_agent_stability"] == 0.0
+    assert phase["phase_classification"] == "oscillating"
+
+
+def test_build_mca_report_two_leaf_groups_depth3():
+    """Depth-3 topology: cross-group similarity computed, coordinators excluded
+    from the leaf sibling mean."""
+    result = {
+        "agent_history": {
+            "L1N1": [{"response": "root synthesis"}],
+            # Coordinators (siblings under L1N1) with disjoint texts — their
+            # group similarity (0.0) must not enter the leaf mean
+            "L2N1": [{"response": "coord one text"}],
+            "L2N2": [{"response": "entirely different synthesis here"}],
+            # Leaf group A under L2N1: identical texts -> similarity 1.0
+            "L3N1": [{"response": "alpha beta"}],
+            "L3N2": [{"response": "alpha beta"}],
+            # Leaf group B under L2N2: identical texts -> similarity 1.0
+            "L3N3": [{"response": "gamma delta"}],
+            "L3N4": [{"response": "gamma delta"}],
+        },
+        "convergence_scores": [],
+        "converged": False,
+        "final_response": "root synthesis",
+    }
+    config = {"cpp": 2, "depth": 3, "convergence_threshold": 0.85}
+
+    report = build_mca_report(result, "Test task", config)
+    metrics = report["rounds"][0]["phase_metrics"]
+
+    # All three sibling groups measured individually
+    assert metrics["sibling_similarity_by_group"] == {
+        "L1N1": 0.0,  # the two coordinators share no tokens
+        "L2N1": 1.0,
+        "L2N2": 1.0,
+    }
+    # Leaf mean covers only the two leaf groups, not the coordinator group
+    assert metrics["mean_leaf_sibling_similarity"] == 1.0
+    # Inter-group leaf pairs ("alpha beta" vs "gamma delta") are disjoint
+    assert metrics["cross_group_similarity"] == 0.0
+
+    phase = report["summary_metrics"]["phase_analysis"]
+    assert phase["final_cross_group_similarity"] == 0.0
+
+
+def test_build_mca_report_cpp1_no_sibling_groups():
+    """cpp=1 chains have no sibling groups: converged runs must not claim the
+    diversity-preserving target phase."""
+    result = {
+        "agent_history": {
+            "L1N1": [
+                {"response": "stable root"},
+                {"response": "stable root"},
+            ],
+            "L2N1": [
+                {"response": "lone leaf"},
+                {"response": "lone leaf"},
+            ],
+        },
+        "convergence_scores": [1.0],
+        "converged": True,
+        "final_response": "stable root",
+    }
+    config = {"cpp": 1, "depth": 2, "convergence_threshold": 0.85}
+
+    report = build_mca_report(result, "Test task", config)
+    phase = report["summary_metrics"]["phase_analysis"]
+
+    assert phase["final_mean_leaf_sibling_similarity"] is None
+    assert phase["genuinely_converged"] is True
+    assert phase["phase_classification"] == "converged_unmeasured"
+
 
 # =============================================================================
 # run_strange_mca Tests

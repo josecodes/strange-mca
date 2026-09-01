@@ -6,6 +6,10 @@ The MCA concept comes from Michael Levin's work on how biological systems exhibi
 
 Each run produces a `final_state.json` and `mca_report.json` in the output directory for inspecting agent behavior.
 
+## Theory
+
+The architecture's central bet — that coherent collective behavior can emerge from purely local agent interaction — turns out to be a question with actual theory behind it. [docs/topology-learnings.md](docs/topology-learnings.md) connects strange-mca to statistical-mechanics results on self-organisation (Sacco, Sakthivadivel & Levin 2026) and to Herbert Simon's *The Sciences of the Artificial*: the interaction topology alone determines which collective phases are possible, sibling groups with lateral visibility are the theory's "cliques," and the target behavior (internally coherent groups holding genuinely different positions) is a predicted stable phase with identifiable failure modes on either side. The phase metrics in `mca_report.json`, the `--lateral_pressure` knob, and `scripts/topology_experiment.py` exist to test those predictions; open jumping-off points are tracked as [GitHub issues](https://github.com/josecodes/strange-mca/issues).
+
 ## High Level Architecture
 
 The system uses a single **flat LangGraph `StateGraph`** with round-based bottom-up processing:
@@ -40,8 +44,9 @@ The strange loop self-reflection occurs at finalization, after convergence.
 - **Downward Signals**: Parent agents send brief nudges to children highlighting gaps or tensions (configurable)
 - **Multiple Perspectives**: Leaf agents are assigned from a pool of 8 default perspectives — analytical, creative, critical, practical, theoretical, empirical, ethical, systemic — or custom perspectives via CLI/API
 - **Strange Loop Refinement**: Optional self-critique and refinement of the final response at the root
+- **Lateral Pressure Control**: `--lateral_pressure` (maintain / balanced / integrate) sets how strongly lateral prompts push agents toward peer agreement — the coupling-strength dial from the theory
 - **Visualization Tools**: Generate visual representations of the agent tree and execution graph
-- **Observability Reports**: JSON reports (`mca_report.json`) with per-round agent data, convergence trajectory, LLM call counts, and lateral revision rates
+- **Observability Reports**: JSON reports (`mca_report.json`) with per-round agent data, convergence trajectory, LLM call counts, lateral revision rates, and phase metrics (sibling-group similarity, cross-group similarity, agent stability, and a phase classification: converged_hierarchical / converged_collapsed / stuck / oscillating, plus converged_unmeasured for topologies without sibling groups)
 
 ## Installation
 
@@ -91,6 +96,7 @@ poetry run python -m src.strange_mca.main --task "Your task here" --child_per_pa
 | `--enable_downward_signals` | on | Enable parent-to-child signals |
 | `--no_downward_signals` | — | Disable parent-to-child signals |
 | `--perspectives` | 8 defaults | Custom perspectives for leaf agents (space-separated) |
+| `--lateral_pressure` | `"balanced"` | How strongly lateral prompts push toward peer agreement (`maintain`, `balanced`, `integrate`) |
 | `--strange_loop_count` | `0` | Number of strange loop iterations to perform |
 | `--domain_specific_instructions` | `""` | Domain-specific instructions for the strange loop prompt |
 | `--log_level` | `"info"` | Logging level (debug, info, warning, error, critical) |
@@ -116,6 +122,7 @@ result = run_strange_mca(
     convergence_threshold=0.85,
     enable_downward_signals=True,
     perspectives=None,  # uses 8 defaults
+    lateral_pressure="balanced",  # or "maintain" / "integrate"
     strange_loop_count=1,
     domain_specific_instructions="Focus on practical applications",
 )
@@ -143,7 +150,7 @@ report = build_mca_report(result, task="...", config={...})
   - `agents.py`: `AgentConfig` (topology-aware), `Agent` (wraps ChatOpenAI), `build_agent_tree()`, `PERSPECTIVES`
   - `prompts.py`: MCA prompt functions (competency, initial response, lateral, observation, signal, strange loop)
   - `tree_helpers.py`: Pure functions for node naming, parent/child/sibling relationships, tree traversal
-  - `convergence.py`: Jaccard token similarity for convergence detection
+  - `convergence.py`: Jaccard token similarity for convergence detection, plus phase metrics (group similarity, phase classification)
   - `visualization.py`: Agent tree and execution graph visualization
   - `logging_utils.py`: Detailed logging utilities
 - `tests/`: Test suite (91 unit tests + 5 live integration tests)
@@ -151,8 +158,8 @@ report = build_mca_report(result, task="...", config={...})
   - `test_main.py`, `test_run_strange_mca.py`, `test_visualization.py`: Integration tests
   - `test_emergent_properties.py`: Automated tests for emergent behavior properties
   - `test_live_integration.py`: Live tests requiring `OPENAI_API_KEY` (marked `@pytest.mark.live`)
-- `docs/`: Design documents and RFCs
-- `scripts/`: Linting and development scripts
+- `docs/`: Design documents, RFCs, and theory notes (`topology-learnings.md`)
+- `scripts/`: Linting and development scripts, plus `topology_experiment.py` for comparing topologies via phase metrics
 - `output/`: Generated outputs, reports, and visualizations
 
 ## Testing

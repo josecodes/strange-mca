@@ -98,33 +98,23 @@ def create_initial_response_prompt(
     return "\n".join(parts)
 
 
-def create_lateral_prompt(
-    task: str,
-    own_response: str,
-    peer_responses: dict[str, str],
-    round_num: int,
-) -> str:
-    """Create a prompt for lateral communication with peers.
+LATERAL_PRESSURE_LEVELS = ("maintain", "balanced", "integrate")
 
-    Args:
-        task: The original task.
-        own_response: The agent's own response this round.
-        peer_responses: Dict mapping peer names to their responses.
-        round_num: Current round number.
-
-    Returns:
-        A prompt string.
-    """
-    parts = [
-        f"You previously responded to this task:\n\nTASK: {task}\n\n"
-        f"YOUR RESPONSE:\n{own_response}\n\n"
-        "Your peer specialists have also responded. Here are their perspectives:\n"
-    ]
-
-    for name, response in peer_responses.items():
-        parts.append(f"--- {name} ---\n{response}\n")
-
-    parts.append(
+# Lateral pressure is the coupling-strength dial (J in docs/topology-learnings.md):
+# how hard the lateral prompt pushes peers toward agreement. "maintain" is weak
+# coupling (preserve diversity), "balanced" is the original wording, "integrate"
+# is strong coupling (push toward a shared answer).
+_LATERAL_PRESSURE_INSTRUCTIONS = {
+    "maintain": (
+        "\nConsider your peers' contributions, but hold your ground. You should:\n"
+        "- MAINTAIN your unique perspective — do not converge toward your peers\n"
+        "- SHARPEN the distinctions between your position and theirs\n"
+        "- DEEPEN your own line of analysis where peers left it uncovered\n"
+        "- NAME disagreements plainly — disagreement is valuable, do not smooth it over\n\n"
+        "Provide your revised response. Revise only to sharpen your own "
+        "contribution; do not adopt peer positions or seek consensus."
+    ),
+    "balanced": (
         "\nConsider your peers' contributions. You should:\n"
         "- MAINTAIN your unique perspective — do not abandon your viewpoint\n"
         "- IDENTIFY contradictions or tensions between your response and others\n"
@@ -134,7 +124,58 @@ def create_lateral_prompt(
         "Provide your revised response. If your original response already captures "
         "your best contribution given what your peers have said, you may restate it "
         "with minor adjustments."
-    )
+    ),
+    "integrate": (
+        "\nConsider your peers' contributions and work toward integration. You should:\n"
+        "- INCORPORATE the strongest points from your peers into your response\n"
+        "- RESOLVE contradictions between your response and theirs where possible\n"
+        "- CONVERGE toward the best shared answer the group can support\n"
+        "- KEEP only disagreements you consider genuinely irreconcilable, stated briefly\n\n"
+        "Provide your revised response, moving the group toward a common position "
+        "while preserving any insight that would otherwise be lost."
+    ),
+}
+
+
+def create_lateral_prompt(
+    task: str,
+    own_response: str,
+    peer_responses: dict[str, str],
+    round_num: int,
+    pressure: str = "balanced",
+) -> str:
+    """Create a prompt for lateral communication with peers.
+
+    Args:
+        task: The original task.
+        own_response: The agent's own response this round.
+        peer_responses: Dict mapping peer names to their responses.
+        round_num: Current round number.
+        pressure: Lateral pressure level — one of LATERAL_PRESSURE_LEVELS.
+            Controls how strongly the prompt pushes toward peer agreement.
+
+    Returns:
+        A prompt string.
+
+    Raises:
+        ValueError: If pressure is not a recognized level.
+    """
+    if pressure not in LATERAL_PRESSURE_LEVELS:
+        raise ValueError(
+            f"Unknown lateral pressure {pressure!r}; "
+            f"expected one of {LATERAL_PRESSURE_LEVELS}"
+        )
+
+    parts = [
+        f"You previously responded to this task:\n\nTASK: {task}\n\n"
+        f"YOUR RESPONSE:\n{own_response}\n\n"
+        "Your peer specialists have also responded. Here are their perspectives:\n"
+    ]
+
+    for name, response in peer_responses.items():
+        parts.append(f"--- {name} ---\n{response}\n")
+
+    parts.append(_LATERAL_PRESSURE_INSTRUCTIONS[pressure])
 
     return "\n".join(parts)
 

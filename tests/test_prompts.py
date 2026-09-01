@@ -89,7 +89,7 @@ def test_create_initial_response_prompt_with_parent_signal():
 
 
 def test_create_lateral_prompt():
-    """Test lateral communication prompt."""
+    """Test lateral communication prompt (default balanced pressure)."""
     prompt = create_lateral_prompt(
         task="Explain recursion",
         own_response="My analytical take.",
@@ -104,6 +104,48 @@ def test_create_lateral_prompt():
     assert "L2N2" in prompt
     assert "Creative perspective" in prompt
     assert "MAINTAIN your unique perspective" in prompt
+
+
+def test_create_lateral_prompt_maintain_pressure():
+    """Maintain pressure emphasizes holding ground, not consensus."""
+    prompt = create_lateral_prompt(
+        task="Explain recursion",
+        own_response="My take.",
+        peer_responses={"L2N2": "Peer take."},
+        round_num=1,
+        pressure="maintain",
+    )
+    assert "do not converge toward your peers" in prompt
+    assert "SHARPEN the distinctions" in prompt
+    assert "do not abandon your viewpoint" not in prompt
+
+
+def test_create_lateral_prompt_integrate_pressure():
+    """Integrate pressure emphasizes convergence toward a shared answer."""
+    prompt = create_lateral_prompt(
+        task="Explain recursion",
+        own_response="My take.",
+        peer_responses={"L2N2": "Peer take."},
+        round_num=1,
+        pressure="integrate",
+    )
+    assert "INCORPORATE the strongest points" in prompt
+    assert "CONVERGE toward the best shared answer" in prompt
+    assert "MAINTAIN your unique perspective" not in prompt
+
+
+def test_create_lateral_prompt_invalid_pressure():
+    """Unknown pressure level raises ValueError."""
+    import pytest
+
+    with pytest.raises(ValueError, match="lateral pressure"):
+        create_lateral_prompt(
+            task="Task",
+            own_response="Response.",
+            peer_responses={"L2N2": "Peer."},
+            round_num=1,
+            pressure="chaotic",
+        )
 
 
 # =============================================================================
