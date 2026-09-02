@@ -6,6 +6,58 @@ Reminder from the README: this is a playground. Every entry here is a small, inf
 
 ---
 
+## 2026-09-02 (evening) — Haiku pressure sweep + topology battery, embedding metrics
+
+**Setup.** Claude Haiku 4.5 via the local LiteLLM gateway (`MCA_CHAT_BASE_URL`), `max_rounds=3`, downward signals on, `similarity_method=embedding` (OpenAI `text-embedding-3-small`; provisional thresholds mush 0.97 / stability 0.95 / convergence 0.95). The convergence loop itself still runs on Jaccard, so every run went the full 3 rounds. ~45 LLM calls per run, 9 runs.
+
+- **Sweep:** cpp=2/depth=3 × lateral pressure {maintain, balanced, integrate} × the transit task — 3 runs.
+- **Battery:** {cpp=6/depth=2 (one 6-leaf group), cpp=2/depth=3 (two 2-leaf groups)} × balanced × 3 tasks (transit, food waste, platform liability) — 6 runs, 7 agents per run in both arms.
+
+**Battery — one big group vs two small groups (balanced pressure, mean of 3 tasks):**
+
+| | cpp=6 / depth=2 | cpp=2 / depth=3 |
+|---|---|---|
+| Final leaf sibling similarity | 0.841 (sd 0.017) | 0.868 (sd 0.021) |
+| Baseline (round-1, pre-lateral) | 0.847 | 0.800 |
+| **Δ final − baseline** | **−0.005** (−0.004, +0.043, −0.055) | **+0.067** (+0.085, +0.101, +0.016) |
+| Paired Δ difference by task (small − big) | | +0.089, +0.058, +0.071 |
+| Final cross-group similarity | — | 0.777 (fell every round in all 3 runs) |
+| Non-root agent stability | 0.852 | 0.853 |
+| Leaf response length, rounds 1→3 (words) | 748 → 2378 | 491 → 1445 |
+| Genuinely converged / phase | 0/3, all "oscillating" | 0/3, all "oscillating" |
+
+**Sweep — pressure dial on cpp=2/depth=3 (transit task):**
+
+| Pressure | Sibling sim (final) | Baseline | Δ | Cross-group (final) | Cross-group by round |
+|---|---|---|---|---|---|
+| maintain | 0.857 | 0.797 | +0.060 | 0.768 | 0.821 → 0.797 → 0.768 |
+| balanced | 0.902 | 0.796 | +0.106 | 0.788 | 0.828 → 0.781 → 0.788 |
+| integrate | 0.893 | 0.822 | +0.071 | 0.811 | 0.849 → 0.843 → 0.811 |
+
+**Findings.**
+
+1. **The prediction as previously written in `topology-learnings.md` §4 was stated the wrong way round — and the paper's actual prediction was supported, 3 tasks out of 3.** The doc had said "smaller groups should preserve perspective diversity better (lower sibling similarity)." What happened: in the two-small-groups arm, siblings *converged toward each other* over the rounds (Δ +0.067) while in the one-big-group arm they did not (Δ −0.005) — paired difference positive in every task. That is the hierarchical phase exactly as the paper defines it: **within-clique cohesion plus cross-group divergence**, appearing in the small-clique topology and failing to appear in the 6-clique — Prop 3's claim that large cliques have a narrow-or-absent window. The earlier framing had imported strange-mca's design goal (diversity *within* sibling groups) into a theory that puts diversity *between* cliques. Design implication, now with data behind it: strange-mca places its perspective diversity inside the densely wired groups, i.e. exactly where the topology erodes it. If perspectives are meant to stay distinct, they belong in different cliques; agents that are meant to agree belong together. (Corrected in `topology-learnings.md` §4.)
+2. **The mosaic signature is the most robust finding in the dataset.** Cross-group similarity fell round over round in all six depth-3 runs here; combined with the earlier gpt-4o-mini run, that is 7 of 7 depth-3 runs ever executed, across two models and two similarity metrics.
+3. **The lateral-pressure dial acts on the cross-group axis, not within groups.** Within-group: balanced pulled hardest (+0.106), integrate less (+0.071), maintain least (+0.060) — non-monotonic and only ~2× the noise floor. Cross-group: maintain 0.768 < balanced 0.788 < integrate 0.811 — monotonic in the predicted direction. Structurally sensible: what couples the two groups is the coordinator clique's lateral exchange, so pressure on coordinator laterals is what moves groups toward or away from each other.
+4. **Dynamics are model-dependent.** On gpt-4o-mini (the earlier run, re-scored under embeddings) three rounds left siblings at baseline in both topologies (Δ −0.016 / −0.028); on Haiku the small-group cohesion appears. Consistent with the theory's division of labor — topology sets which phases are possible, the model sets the effective coupling — but the 4o-mini comparison is n=1 per arm.
+5. **Response bloat is severe on Haiku and scales with group size.** Leaves tripled in length over three rounds; the 6-leaf group reached ~2400 words per leaf vs ~1450 for 2-leaf groups. More peers to absorb, more text (issue #25).
+6. **The phase classifier is still uninformative, for a new reason.** All 9 runs are "oscillating" because absolute embedding thresholds calibrated on gpt-4o-mini re-scores do not transfer: Haiku's whole similarity band sits lower (baseline ~0.80 vs 0.93; root round-over-round 0.87–0.94, under the 0.95 convergence threshold). The next step is baseline-relative thresholds (e.g. collapse = final exceeds the run's own baseline by a margin), not another absolute calibration.
+7. **Noise floor.** Baselines are pressure-independent by construction and varied ±0.015 across the sweep's three runs; across tasks within a config they varied 0.76–0.89. Differences under ~0.03 in a single comparison should be ignored; the paired-by-task Δ comparison (finding 1) is the cleanest test in this dataset.
+
+**Caveats.** n=3 per arm (battery), n=1 per setting (sweep); one model per experiment; absolute sibling similarity is confounded by which perspectives share a group (Δ from baseline is the within-run control); embedding thresholds provisional; Haiku through the gateway ran ~20 min per run, not the ~5 min estimated.
+
+Reproduce (key in `LITELLM_MASTER_KEY`; see the local-offload notes):
+```bash
+export MCA_CHAT_BASE_URL=http://xochitl:4000 MCA_CHAT_API_KEY=$LITELLM_MASTER_KEY
+caffeinate -i poetry run python -u scripts/topology_experiment.py --configs 2,3 \
+  --lateral_pressures maintain balanced integrate --tasks "<transit task>" \
+  --model anthropic/claude-haiku-4-5 --similarity_method embedding --output_dir output/haiku_pressure_sweep
+caffeinate -i poetry run python -u scripts/topology_experiment.py --configs 6,2 2,3 \
+  --model anthropic/claude-haiku-4-5 --similarity_method embedding --output_dir output/haiku_topology_battery
+```
+
+---
+
 ## 2026-09-02 — Small topology comparison (1 task, 2 topologies)
 
 **Setup.** `scripts/topology_experiment.py`, gpt-4o-mini, `max_rounds=3`, `lateral_pressure=balanced`, downward signals on. Task: "What are the most important trade-offs in designing a public transit system for a mid-sized city?" One run per topology, 7 agents each.
@@ -59,13 +111,14 @@ caffeinate -i poetry run python -u scripts/topology_experiment.py \
 
 ---
 
-## State of the instrument (as of 2026-09-02)
+## State of the instrument (as of 2026-09-02, evening)
 
-**Trustworthy now:** sibling-group similarity and cross-group similarity as *relative* diversity measures (comparing across agents, where lexical difference is the thing being detected); pre/post-lateral comparisons; response-length trends.
+**Trustworthy now:** the *relative* metrics — Δ from the run's own round-1 pre-lateral baseline, within- vs cross-group ordering, round-over-round trends — under either similarity method. Embedding similarity (`--similarity_method embedding`, report-side) sees through paraphrase and is the default for analysis going forward; Jaccard remains the loop's convergence check.
 
-**Not trustworthy yet:** the convergence score and therefore the phase classification's converged/oscillating/stuck distinction, for prose-length responses. Blocked on embedding-based similarity (#26).
+**Not trustworthy yet:** absolute-threshold phase classification. Jaccard calls prose-length runs "oscillating"; embedding cosine is compressed into a model-specific band, so thresholds calibrated on one model mislabel another. Every run to date carries the label "oscillating" for instrument reasons, not behavioral ones.
 
-**Recommended order of next work:**
-1. Embedding-based similarity with round-1 pre-lateral baseline normalization (#26). Small change; unblocks everything below.
-2. `lateral_pressure` sweep (`maintain` / `balanced` / `integrate`) on one topology — locates where the coupling dial actually moves the system.
-3. Full topology battery (3+ tasks × 2+ topologies). Cheap enough on a small hosted model or free on a local one via an OpenAI-compatible gateway; running the same comparison on a different model also tests the theory's substrate-independence claim.
+**Recommended next work:**
+1. Baseline-relative phase thresholds (collapse / convergence / stability expressed as margins over the run's own baseline band), replacing the absolute `PHASE_THRESHOLDS["embedding"]`.
+2. Test the design implication of finding 1 above: a topology variant that places distinct perspectives in *different* sibling groups (agents meant to agree grouped together) and checks whether cross-group divergence carries the diversity.
+3. Repeat the battery on gpt-4o-mini and a local model (free via the gateway) to separate topology effects from model effects — the theory's substrate-independence claim.
+4. Response-length control (a scarcity mechanism, issue #25) — bloat is now the most visible pathology in the data.
