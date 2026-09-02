@@ -19,6 +19,7 @@ from src.strange_mca.logging_utils import (
     setup_detailed_logging,
 )
 from src.strange_mca.prompts import (
+    LATERAL_PRESSURE_LEVELS,
     create_initial_response_prompt,
     create_lateral_prompt,
     create_observation_prompt,
@@ -138,6 +139,7 @@ def create_execution_graph(
     enable_downward_signals: bool = True,
     strange_loop_count: int = 0,
     domain_specific_instructions: str = "",
+    lateral_pressure: str = "balanced",
 ) -> Any:
     """Create a flat LangGraph StateGraph for MCA execution.
 
@@ -150,12 +152,19 @@ def create_execution_graph(
         enable_downward_signals: Whether to enable parent-to-child signals.
         strange_loop_count: Number of strange loop iterations at finalization.
         domain_specific_instructions: Domain-specific instructions for strange loop.
+        lateral_pressure: How strongly lateral prompts push toward peer
+            agreement — one of "maintain", "balanced", "integrate".
 
     Returns:
         Compiled LangGraph.
     """
     if depth < 2:
         raise ValueError("depth must be >= 2 (need at least a root and leaf level)")
+    if lateral_pressure not in LATERAL_PRESSURE_LEVELS:
+        raise ValueError(
+            f"Unknown lateral pressure {lateral_pressure!r}; "
+            f"expected one of {LATERAL_PRESSURE_LEVELS}"
+        )
 
     # Precompute topology
     all_nodes = generate_all_nodes(cpp, depth)
@@ -249,7 +258,11 @@ def create_execution_graph(
                 continue
 
             prompt = create_lateral_prompt(
-                task, own_response, peer_responses, round_num
+                task,
+                own_response,
+                peer_responses,
+                round_num,
+                pressure=lateral_pressure,
             )
             lateral_response = agent.invoke(prompt)
 
@@ -337,7 +350,11 @@ def create_execution_graph(
                         continue
 
                     prompt = create_lateral_prompt(
-                        task, own_response, peer_responses, round_num
+                        task,
+                        own_response,
+                        peer_responses,
+                        round_num,
+                        pressure=lateral_pressure,
                     )
                     lateral_response = agent.invoke(prompt)
 

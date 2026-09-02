@@ -99,6 +99,13 @@ def main():
         help="Custom perspectives for leaf agents",
     )
     parser.add_argument(
+        "--lateral_pressure",
+        type=str,
+        choices=["maintain", "balanced", "integrate"],
+        default="balanced",
+        help="How strongly lateral prompts push agents toward peer agreement",
+    )
+    parser.add_argument(
         "--log_level",
         type=str,
         default="info",
@@ -166,6 +173,7 @@ def main():
     logger.info(f"  Max rounds: {args.max_rounds}")
     logger.info(f"  Convergence threshold: {args.convergence_threshold}")
     logger.info(f"  Downward signals: {enable_downward_signals}")
+    logger.info(f"  Lateral pressure: {args.lateral_pressure}")
     logger.info(f"  Output directory: {output_dir}")
 
     num_agents = total_nodes(args.child_per_parent, args.depth)
@@ -195,6 +203,7 @@ def main():
         perspectives=args.perspectives,
         strange_loop_count=args.strange_loop_count,
         domain_specific_instructions=args.domain_specific_instructions,
+        lateral_pressure=args.lateral_pressure,
         log_level=args.log_level,
         viz=args.viz,
         local_logs_only=args.local_logs_only,

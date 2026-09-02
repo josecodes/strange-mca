@@ -9,7 +9,11 @@ from src.strange_mca.graph import (
     merge_dicts,
     run_execution_graph,
 )
-from tests.conftest import build_mock_agents_depth2_cpp3, make_mock_agent
+from tests.conftest import (
+    build_mock_agents_depth2_cpp3,
+    build_mock_agents_depth3_cpp2,
+    make_mock_agent,
+)
 
 # =============================================================================
 # merge_dicts Tests
@@ -114,6 +118,60 @@ def test_create_execution_graph_depth3_cpp2():
         depth=3,
     )
     assert graph is not None
+
+
+def test_create_execution_graph_invalid_lateral_pressure():
+    """Invalid lateral pressure fails fast at graph creation."""
+    import pytest
+
+    agents = build_mock_agents_depth2_cpp3()
+    with pytest.raises(ValueError, match="lateral pressure"):
+        create_execution_graph(agents=agents, cpp=3, depth=2, lateral_pressure="loose")
+
+
+def test_lateral_pressure_reaches_lateral_prompts():
+    """The lateral_pressure setting shapes the lateral prompts agents receive."""
+    agents = build_mock_agents_depth2_cpp3()
+    graph, recursion_limit = create_execution_graph(
+        agents=agents,
+        cpp=3,
+        depth=2,
+        max_rounds=1,
+        lateral_pressure="integrate",
+    )
+    graph.invoke(
+        {"original_task": "Test task"},
+        config={"recursion_limit": recursion_limit},
+    )
+
+    leaf_prompts = [call.args[0] for call in agents["L2N1"].invoke.call_args_list]
+    lateral_prompts = [p for p in leaf_prompts if "peer specialists" in p]
+    assert lateral_prompts, "expected at least one lateral prompt"
+    assert all("CONVERGE toward the best shared answer" in p for p in lateral_prompts)
+
+
+def test_lateral_pressure_reaches_internal_level_prompts():
+    """For depth>=3 trees the pressure setting also shapes coordinator lateral
+    prompts (the lateral_level call site, not just leaf_lateral)."""
+    agents = build_mock_agents_depth3_cpp2()
+    graph, recursion_limit = create_execution_graph(
+        agents=agents,
+        cpp=2,
+        depth=3,
+        max_rounds=1,
+        enable_downward_signals=False,
+        lateral_pressure="maintain",
+    )
+    graph.invoke(
+        {"original_task": "Test task"},
+        config={"recursion_limit": recursion_limit},
+    )
+
+    for name in ("L2N1", "L3N1"):  # a coordinator and a leaf
+        prompts = [call.args[0] for call in agents[name].invoke.call_args_list]
+        lateral_prompts = [p for p in prompts if "peer specialists" in p]
+        assert lateral_prompts, f"expected a lateral prompt for {name}"
+        assert all("do not converge toward your peers" in p for p in lateral_prompts)
 
 
 # =============================================================================
