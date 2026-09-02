@@ -1,5 +1,7 @@
 # strange-mca
 
+> **What this is (and isn't):** strange-mca is a vibe-coded conceptual playground, not a production system and not a research result. It exists to play with Michael Levin's Multiscale Competency Architecture and Hofstadter's strange loops using LLM agents, and a large share of the code, tests, and documentation was written with heavy assistance from Claude. Treat the architecture as exploratory, the metrics as instruments for playing, and every claim in the docs as a hypothesis — nothing here has been validated beyond small, informal experiments.
+
 A multiagent system that models a [Multiscale Competency Architecture](https://pubmed.ncbi.nlm.nih.gov/37156924/) (MCA) with [Strange Loop](https://en.wikipedia.org/wiki/Strange_loop) self-reflection. LLM agents are arranged in a hierarchy where each agent responds independently from a unique perspective, communicates laterally with peers, and iterates in rounds until the root's output converges. Higher-order behavior emerges from local interaction, not top-down assignment.
 
 The MCA concept comes from Michael Levin's work on how biological systems exhibit competence across multiple scales — from cells to organisms to social groups. This project uses LLMs as the information-processing nodes in a simplified software model of that idea. The Strange Loop component adds configurable self-reflection at the root node during finalization.
