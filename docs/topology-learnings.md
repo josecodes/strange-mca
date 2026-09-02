@@ -121,3 +121,9 @@ strange-mca currently coordinates by pure direct message-passing; nothing persis
 - **Levin & Lyons** — *Cognitive glues are shared models of relative scarcities* (Phil Trans A 384(2320), 2026, [doi:10.1098/rsta.2024.0528](https://doi.org/10.1098/rsta.2024.0528)): what binds a collective is a shared scarcity model (canonical example: prices). strange-mca has no scarcity — nothing makes one agent's contribution cost another's — which may be why synthesis tends toward averaging.
 - **Pigozzi, Goldstein & Levin** — *Associative conditioning... increases integrative causal emergence* (Communications Biology 8:1027, 2025) and **Pigozzi & Levin** ([arXiv:2605.06746](https://arxiv.org/abs/2605.06746)): ΦID / causal emergence as a *computable* answer to evaluation question Q2 ("does the root produce something no child did") — needs per-agent per-round embeddings; `agent_history` already has the right shape.
 - **Zhang & Levin** — *Intelligence from Learnable Novelty* ([arXiv:2607.18433](https://arxiv.org/abs/2607.18433)): cheap differentiable metric separating learnable novelty from noise; candidate upgrade for the Jaccard convergence check (loop while rounds add learnable structure; stop when residual novelty is noise). Caveat: built for long time series; max_rounds=3 may be too short to estimate.
+
+---
+
+## 9. Empirical status
+
+See [experiment-log.md](experiment-log.md) for what has actually been measured. As of 2026-09-02: two small runs; diversity metrics behave as the theory predicts in direction (and the depth-3 run shows the mosaic signature — cross-group similarity below and falling relative to within-group), but with n=1 nothing is evidence yet; the convergence metric cannot see through paraphrase, which blocks the phase classifier until embedding similarity lands (#26).
