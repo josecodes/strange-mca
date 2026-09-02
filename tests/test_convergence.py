@@ -3,8 +3,10 @@
 import pytest
 
 from src.strange_mca.convergence import (
+    EmbeddingSimilarity,
     classify_phase,
     compute_jaccard_similarity,
+    cosine_similarity,
     mean_cross_group_similarity,
     mean_pairwise_similarity,
 )
@@ -151,3 +153,74 @@ def test_classify_phase_custom_thresholds():
     """Thresholds are configurable."""
     assert classify_phase(True, 0.5, 0.9, mush_threshold=0.4) == "converged_collapsed"
     assert classify_phase(False, 0.4, 0.5, stability_threshold=0.4) == "stuck"
+
+
+# =============================================================================
+# cosine_similarity / EmbeddingSimilarity Tests
+# =============================================================================
+
+
+def test_cosine_similarity_basic():
+    """Identical direction 1.0, orthogonal 0.0, zero vector 0.0."""
+    assert cosine_similarity([1.0, 2.0], [2.0, 4.0]) == pytest.approx(1.0)
+    assert cosine_similarity([1.0, 0.0], [0.0, 1.0]) == 0.0
+    assert cosine_similarity([0.0, 0.0], [1.0, 1.0]) == 0.0
+
+
+def fake_embed(texts):
+    """Deterministic 2-d embedder: texts starting with 'a' -> x axis, else y."""
+    return [
+        [1.0, 0.0] if t.strip().lower().startswith("a") else [0.0, 1.0] for t in texts
+    ]
+
+
+def test_embedding_similarity_scores():
+    """Same-direction texts score 1.0, orthogonal 0.0."""
+    sim = EmbeddingSimilarity(embed_fn=fake_embed)
+    assert sim("alpha one", "alpha two") == pytest.approx(1.0)
+    assert sim("alpha", "beta") == 0.0
+
+
+def test_embedding_similarity_blank_handling():
+    """Blank texts follow Jaccard's convention: both blank 1.0, one blank 0.0."""
+    sim = EmbeddingSimilarity(embed_fn=fake_embed)
+    assert sim("", "   ") == 1.0
+    assert sim("alpha", "") == 0.0
+
+
+def test_embedding_similarity_warm_batches_and_caches():
+    """warm() embeds unique non-blank texts once; later lookups hit the cache."""
+    calls = []
+
+    def counting_embed(texts):
+        calls.append(list(texts))
+        return fake_embed(texts)
+
+    sim = EmbeddingSimilarity(embed_fn=counting_embed)
+    sim.warm(["alpha", "beta", "alpha", "", "  "])
+    assert calls == [["alpha", "beta"]]  # deduplicated, blanks dropped
+    sim("alpha", "beta")
+    sim("beta", "alpha")
+    assert len(calls) == 1  # served from cache
+    sim("gamma", "alpha")  # new text -> one more call, for gamma only
+    assert calls[1] == ["gamma"]
+
+
+def test_group_metrics_accept_custom_similarity():
+    """mean_pairwise / mean_cross_group use the injected similarity."""
+    sim = EmbeddingSimilarity(embed_fn=fake_embed)
+    # Under Jaccard these share no tokens (0.0); under the fake embedder both
+    # are 'a'-texts (1.0).
+    assert mean_pairwise_similarity(["alpha x", "apple y"]) == 0.0
+    assert mean_pairwise_similarity(["alpha x", "apple y"], sim) == pytest.approx(1.0)
+    assert mean_cross_group_similarity(
+        [["alpha x"], ["apple y"]], sim
+    ) == pytest.approx(1.0)
+    assert mean_cross_group_similarity([["alpha x"], ["beta y"]], sim) == 0.0
+
+
+def test_embedding_similarity_vector_count_mismatch_is_clear():
+    """A short batch response raises a clear error, not a KeyError later."""
+    sim = EmbeddingSimilarity(embed_fn=lambda texts: [[1.0, 0.0]])
+    with pytest.raises(RuntimeError, match="1 vectors for 2 texts"):
+        sim.warm(["alpha", "beta"])

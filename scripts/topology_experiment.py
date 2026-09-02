@@ -7,20 +7,30 @@ than one large group. The default comparison is cpp=6/depth=2 (7 agents, one
 6-leaf group) against cpp=2/depth=3 (7 agents, two 2-leaf groups), scored by
 the phase metrics in mca_report.json.
 
-Each (config, task) pair is one full MCA run, so this costs real LLM calls.
-Use --dry_run to preview the plan.
+Each (config, pressure, task) triple is one full MCA run, so this costs real
+LLM calls. Use --dry_run to preview the plan.
 
 Usage:
-    poetry run python scripts/topology_experiment.py [options]
+    caffeinate -i poetry run python -u scripts/topology_experiment.py [options]
+
+    (On macOS run long experiments under ``caffeinate -i``: a sequential run
+    that outlives the display timeout will hang on stale API connections when
+    the machine sleeps. ``python -u`` keeps the progress log unbuffered.)
 
 Options:
     --configs CPP,DEPTH [CPP,DEPTH ...]   Topologies to compare (default: 6,2 2,3)
     --tasks TASK [TASK ...]               Task battery (default: 3 built-in tasks)
     --model MODEL                         LLM model (default: gpt-4o-mini)
     --max_rounds N                        Rounds per run (default: 3)
-    --lateral_pressure LEVEL              maintain | balanced | integrate
+    --lateral_pressures LEVEL [LEVEL ...] maintain | balanced | integrate
+                                          (default: balanced; several = a sweep)
+    --similarity_method METHOD            jaccard | embedding (report metrics)
     --output_dir DIR                      Experiment output root
     --dry_run                             Print the plan without running
+
+To route chat calls through an OpenAI-compatible gateway (local models,
+other providers), set MCA_CHAT_BASE_URL and MCA_CHAT_API_KEY and pass the
+gateway's model name via --model. Embeddings still use OPENAI_API_KEY.
 """
 
 import argparse
@@ -71,6 +81,9 @@ def summarize_runs(run_reports: list[dict]) -> dict:
     """Aggregate phase metrics across a config's runs."""
     finals_sibling = []
     finals_cross = []
+    deltas = []
+    stabilities = []
+    genuinely_converged = 0
     classifications: dict[str, int] = {}
     rounds_used = []
 
@@ -85,6 +98,14 @@ def summarize_runs(run_reports: list[dict]) -> dict:
         cross = phase.get("final_cross_group_similarity")
         if cross is not None:
             finals_cross.append(cross)
+        delta = phase.get("final_minus_baseline")
+        if delta is not None:
+            deltas.append(delta)
+        stab = phase.get("mean_agent_stability")
+        if stab is not None:
+            stabilities.append(stab)
+        if phase.get("genuinely_converged"):
+            genuinely_converged += 1
         label = phase.get("phase_classification", "unknown")
         classifications[label] = classifications.get(label, 0) + 1
 
@@ -94,7 +115,10 @@ def summarize_runs(run_reports: list[dict]) -> dict:
     return {
         "runs": len(run_reports),
         "mean_final_leaf_sibling_similarity": mean(finals_sibling),
+        "mean_final_minus_baseline": mean(deltas),
         "mean_final_cross_group_similarity": mean(finals_cross),
+        "mean_agent_stability": mean(stabilities),
+        "genuinely_converged_runs": genuinely_converged,
         "phase_classifications": classifications,
         "mean_rounds_used": mean([float(r) for r in rounds_used]),
     }
@@ -111,10 +135,16 @@ def main():
     parser.add_argument("--model", type=str, default="gpt-4o-mini")
     parser.add_argument("--max_rounds", type=int, default=3)
     parser.add_argument(
-        "--lateral_pressure",
-        type=str,
+        "--lateral_pressures",
+        nargs="+",
         choices=["maintain", "balanced", "integrate"],
-        default="balanced",
+        default=["balanced"],
+    )
+    parser.add_argument(
+        "--similarity_method",
+        type=str,
+        choices=["jaccard", "embedding"],
+        default="jaccard",
     )
     parser.add_argument("--output_dir", type=str, default=None)
     parser.add_argument("--dry_run", action="store_true")
@@ -129,7 +159,9 @@ def main():
             f"  cpp={cpp} depth={depth}: {agents} agents, "
             f"{len(args.tasks)} tasks, max {args.max_rounds} rounds each"
         )
-    total_runs = len(configs) * len(args.tasks)
+    total_runs = len(configs) * len(args.lateral_pressures) * len(args.tasks)
+    print(f"  Lateral pressures: {args.lateral_pressures}")
+    print(f"  Similarity method for reports: {args.similarity_method}")
     print(f"  Total runs: {total_runs} (each run makes many LLM calls)")
 
     if args.dry_run:
@@ -154,32 +186,37 @@ def main():
     summary: dict = {
         "model": args.model,
         "max_rounds": args.max_rounds,
-        "lateral_pressure": args.lateral_pressure,
+        "lateral_pressures": args.lateral_pressures,
+        "similarity_method": args.similarity_method,
         "tasks": args.tasks,
         "configs": {},
     }
 
     for cpp, depth in configs:
-        config_key = f"cpp{cpp}_depth{depth}"
-        run_reports = []
-        for task_idx, task in enumerate(args.tasks, start=1):
-            run_dir = os.path.join(exp_dir, f"{config_key}_task{task_idx}")
-            print(f"\nRunning {config_key} task {task_idx}/{len(args.tasks)}...")
-            run_strange_mca(
-                task=task,
-                child_per_parent=cpp,
-                depth=depth,
-                model=args.model,
-                max_rounds=args.max_rounds,
-                lateral_pressure=args.lateral_pressure,
-                log_level="warning",
-                output_dir=run_dir,
-            )
-            report_path = os.path.join(run_dir, "mca_report.json")
-            with open(report_path) as f:
-                run_reports.append(json.load(f))
+        for pressure in args.lateral_pressures:
+            config_key = f"cpp{cpp}_depth{depth}_{pressure}"
+            run_reports = []
+            for task_idx, task in enumerate(args.tasks, start=1):
+                run_dir = os.path.join(exp_dir, f"{config_key}_task{task_idx}")
+                print(
+                    f"\nRunning {config_key} task {task_idx}/{len(args.tasks)}..."
+                )
+                run_strange_mca(
+                    task=task,
+                    child_per_parent=cpp,
+                    depth=depth,
+                    model=args.model,
+                    max_rounds=args.max_rounds,
+                    lateral_pressure=pressure,
+                    similarity_method=args.similarity_method,
+                    log_level="warning",
+                    output_dir=run_dir,
+                )
+                report_path = os.path.join(run_dir, "mca_report.json")
+                with open(report_path) as f:
+                    run_reports.append(json.load(f))
 
-        summary["configs"][config_key] = summarize_runs(run_reports)
+            summary["configs"][config_key] = summarize_runs(run_reports)
 
     summary_path = os.path.join(exp_dir, "experiment_summary.json")
     with open(summary_path, "w") as f:
@@ -188,24 +225,30 @@ def main():
     print("\n" + "=" * 72)
     print("Topology experiment summary")
     print("=" * 72)
-    header = (
-        f"{'config':<16}{'sibling sim':>12}{'cross-group':>12}"
-        f"{'rounds':>8}  phases"
+    def cell(value, width):
+        return f"{value if value is not None else '—':>{width}}"
+
+    print(
+        f"{'config':<26}{'sibling':>9}{'Δbase':>8}{'cross':>8}"
+        f"{'stabil':>8}{'conv':>6}  phases"
     )
-    print(header)
     for config_key, stats in summary["configs"].items():
-        sib = stats["mean_final_leaf_sibling_similarity"]
-        cross = stats["mean_final_cross_group_similarity"]
         print(
-            f"{config_key:<16}"
-            f"{sib if sib is not None else '—':>12}"
-            f"{cross if cross is not None else '—':>12}"
-            f"{stats['mean_rounds_used'] if stats['mean_rounds_used'] is not None else '—':>8}"
-            f"  {stats['phase_classifications']}"
+            f"{config_key:<26}"
+            + cell(stats["mean_final_leaf_sibling_similarity"], 9)
+            + cell(stats["mean_final_minus_baseline"], 8)
+            + cell(stats["mean_final_cross_group_similarity"], 8)
+            + cell(stats["mean_agent_stability"], 8)
+            + cell(f"{stats['genuinely_converged_runs']}/{stats['runs']}", 6)
+            + f"  {stats['phase_classifications']}"
         )
     print(
-        "\nLower sibling similarity = diversity retained; "
-        "prediction: smaller groups score lower."
+        "\nsibling = final leaf sibling similarity (lower = diversity retained; "
+        "prediction: smaller groups lower)\n"
+        "Δbase = final minus round-1 pre-lateral baseline (net effect of the "
+        "rounds on diversity)\n"
+        "cross = final cross-group similarity; stabil = non-root agent "
+        "stability; conv = runs genuinely converged"
     )
     print(f"Summary saved to {summary_path}")
 

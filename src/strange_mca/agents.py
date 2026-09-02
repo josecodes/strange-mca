@@ -5,6 +5,7 @@ perspective assignment, and build_agent_tree() for constructing the full
 agent hierarchy with competency prompts.
 """
 
+import os
 from typing import Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -82,7 +83,18 @@ class Agent:
         """
         self.config = config
         self.system_prompt = config.system_prompt or ""
-        self.llm = ChatOpenAI(model=model_name, temperature=0.7)
+        # Optional routing of chat calls through an OpenAI-compatible gateway
+        # (e.g. a LiteLLM proxy serving local or third-party models). These
+        # are deliberately NOT the standard OPENAI_* variables so that other
+        # OpenAI clients in the process (embeddings) keep their default routing.
+        llm_kwargs: dict = {"model": model_name, "temperature": 0.7}
+        base_url = os.environ.get("MCA_CHAT_BASE_URL")
+        api_key = os.environ.get("MCA_CHAT_API_KEY")
+        if base_url:
+            llm_kwargs["base_url"] = base_url
+        if api_key:
+            llm_kwargs["api_key"] = api_key
+        self.llm = ChatOpenAI(**llm_kwargs)
 
     def invoke(self, prompt: str) -> str:
         """Pass prompt directly as a HumanMessage.
