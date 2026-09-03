@@ -28,16 +28,22 @@ Distilled from Sacco, Sakthivadivel & Levin, *Topological constraints on self-or
 - **Fixed vs. dynamic graph:** the theory covers static wiring only (adiabatic assumption); dynamic routing/structure exits it (Watson & Levin, *natural induction*, is the theory for that regime). Noted on strange-mca issue #10.
 - **Related, for the factory:** compressed coordination signals beat verbal nudges (*virtual governor*, Lyons/Pio-Lopez/Levin — issue #24); shared scarcity models as cognitive glue (issue #25); learnable novelty / ΦID as emergence metrics (issue #26).
 
-## 3. Empirical state (as of 2026-09-02)
+## 3. Empirical state (as of 2026-09-02, end of day)
 
-`docs/experiment-log.md` is authoritative. Summary: instrumentation merged (PR #27 — sibling/cross-group similarity, phase classifier, `lateral_pressure` dial, `scripts/topology_experiment.py`). Two small runs: diversity metrics trend as predicted (n=1, not evidence); the depth-3 run shows the mosaic signature (cross-group similarity below and falling vs within-group); `balanced` lateral pressure yields churn without convergence; Jaccard is blind to paraphrase, so a report-side **embedding similarity** option is being added (branch `embedding-metrics`, in progress at handoff time) followed by a Haiku-via-gateway pressure sweep and a 3-task × 2-topology battery. Results will be appended to the experiment log — check it.
+`docs/experiment-log.md` is authoritative. Instrumentation is merged (PR #27: sibling/cross-group similarity, phase classifier, `lateral_pressure` dial; PR #28: report-side embedding similarity, baseline/Δ metrics, gateway routing, `rescore_report.py`). Eleven runs total across gpt-4o-mini and Haiku 4.5.
+
+**The key result, and a correction.** A 3-task battery on Haiku compared one 6-leaf group against two 2-leaf groups (7 agents each). The paper's clique prediction held 3/3: **small cliques cohered internally** (sibling similarity rose +0.067 over each run's no-interaction baseline) **while diverging from each other** (cross-group similarity fell every round — now 7/7 depth-3 runs ever); **the 6-clique did not cohere** (Δ −0.005). Getting there exposed a framing error in an earlier version of the theory doc, which had predicted the opposite within-group direction by importing strange-mca's design goal (diversity *within* sibling groups) into a theory that puts diversity *between* cliques. Corrected in `topology-learnings.md` §4.
+
+**Design implication, with data behind it:** strange-mca places its perspective diversity inside the densely wired groups — exactly where the topology erodes it. Agents meant to stay distinct belong in *different* cliques; agents meant to agree belong together. This is direct evidence on question 2 below and should shape the factory's org design from the start.
+
+**Other findings to carry:** the lateral-pressure dial moves cross-group similarity monotonically (maintain < balanced < integrate) but does little within groups — it acts through the coordinator clique that couples groups. Dynamics are model-dependent (gpt-4o-mini showed no within-group cohesion; Haiku does): topology sets what is possible, the model sets the effective coupling. Response length roughly triples over three rounds and scales with group size (no scarcity — issue #25). Absolute-threshold phase classification is still uninformative (embedding cosine sits in a model-specific band); the trustworthy readouts are *relative* — Δ from baseline, within- vs cross-group ordering, round-over-round trends. Next instrument step is baseline-relative thresholds.
 
 ## 4. The questions the factory doc must answer
 
 Raised in conversation, not yet answered — Jose wants to speak to them in his own framing first:
 
 1. **What does the factory manufacture, and what is its "stored pattern"?** (spec? architecture invariants? house conventions — the thing every part must stay coherent with)
-2. **Where should order live, and where should diversity live?** (what must be unanimous — contracts, style, architectural decisions — vs. where uncorrelated exploration is wanted; dense wiring for the former, deliberate sparseness for the latter)
+2. **Where should order live, and where should diversity live?** (what must be unanimous — contracts, style, architectural decisions — vs. where uncorrelated exploration is wanted; dense wiring for the former, deliberate sparseness for the latter) — *now with evidence: see §3. Dense groups converge; distinctness survives only across sparse boundaries.*
 3. **What is the blackboard?** (the repo, plausibly: code, tests, CI state, issues as durable marks that outlive any agent's context)
 4. **What breaks coherence at scale?** (long-horizon agent work is the chain regime: drift, not crash; fix is environmental pinning, not bigger contexts)
 5. **What are the factory's stable intermediate forms?** (Simon: units of work small enough to survive interruption and settled enough to build on — likely the single most consequential design choice for agent orchestration)
@@ -45,7 +51,7 @@ Raised in conversation, not yet answered — Jose wants to speak to them in his 
 ## 5. Pointers
 
 - Theory: `docs/topology-learnings.md` · Evidence: `docs/experiment-log.md` · Prior design lineage: `docs/design-emergent-mca.md` (and the RFC/design docs it supersedes)
-- Issues: #10 (dynamic topology boundary), #23 blackboard, #24 compressed signals, #25 scarcity, #26 metrics · PR #27 (instrumentation)
+- Issues: #10 (dynamic topology boundary), #23 blackboard, #24 compressed signals, #25 scarcity, #26 metrics · PRs #27 (instrumentation), #28 (embedding metrics + results)
 - Reading list beyond the topology paper: Levin & Lyons *Cognitive glues* (2026); Lyons/Pio-Lopez/Levin *Virtual Governor* (2026); Watson/Levin/Lewens *Natural induction* I & II (2025); Pigozzi & Levin ΦID papers; Zhang & Levin *Learnable Novelty* (2026); Simon *The Sciences of the Artificial* ("The Architecture of Complexity", "The Science of Design")
 - Infra: local LiteLLM gateway at `http://xochitl:4000` (OpenAI-compatible; local qwen/gpt-oss models and `anthropic/*` incl. Haiku; key via `LITELLM_MASTER_KEY`, see the `local-offload` skill). strange-mca routes chat through it with `MCA_CHAT_BASE_URL` / `MCA_CHAT_API_KEY`. Run long sequential experiments under `caffeinate -i`.
 
