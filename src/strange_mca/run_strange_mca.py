@@ -8,12 +8,16 @@ import copy
 import json
 import logging
 import os
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from dotenv import load_dotenv
 
 from src.strange_mca.agents import build_agent_tree
 from src.strange_mca.convergence import (
+    PHASE_THRESHOLDS,
+    SIMILARITY_METHODS,
+    EmbeddingSimilarity,
+    SimilarityFn,
     classify_phase,
     compute_jaccard_similarity,
     mean_cross_group_similarity,
@@ -35,11 +39,25 @@ load_dotenv()
 logger = logging.getLogger("strange_mca")
 
 
+def _collect_texts(agent_history: dict) -> list[str]:
+    """Every non-blank response and lateral response in the history."""
+    texts = []
+    for history in agent_history.values():
+        for rd in history:
+            for key in ("response", "lateral_response"):
+                text = rd.get(key)
+                if isinstance(text, str) and text.strip():
+                    texts.append(text)
+    return texts
+
+
 def _compute_phase_analysis(
     agent_history: dict,
     config: dict,
     convergence_scores: list[float],
     rounds: list[dict],
+    similarity: SimilarityFn = compute_jaccard_similarity,
+    method: str = "jaccard",
 ) -> Optional[dict]:
     """Compute phase-aware metrics and attach per-round data to ``rounds``.
 
@@ -49,8 +67,9 @@ def _compute_phase_analysis(
 
     Adds a ``phase_metrics`` entry to each round dict (sibling-group
     similarity, mean leaf sibling similarity, cross-group similarity) and
-    returns the summary phase analysis. See docs/topology-learnings.md §4 for
-    what these metrics mean.
+    returns the summary phase analysis. All similarities use ``similarity``;
+    thresholds come from PHASE_THRESHOLDS[method]. See
+    docs/topology-learnings.md §4 for what these metrics mean.
     """
     cpp = config.get("cpp")
     depth = config.get("depth")
@@ -62,6 +81,12 @@ def _compute_phase_analysis(
         or not agent_history
     ):
         return None
+
+    thresholds = PHASE_THRESHOLDS[method]
+
+    # Batch-embed every text up front so the report costs one embedding call.
+    if hasattr(similarity, "warm"):
+        similarity.warm(_collect_texts(agent_history))
 
     # Sibling groups keyed by parent node; a group is a parent's children.
     sibling_groups: dict[str, list[str]] = {}
@@ -77,12 +102,25 @@ def _compute_phase_analysis(
         if is_leaf(level + 1, depth):
             leaf_group_parents.append(node)
 
-    def round_text(name: str, round_idx: int) -> Optional[str]:
+    def round_text(
+        name: str, round_idx: int, pre_lateral: bool = False
+    ) -> Optional[str]:
         history = agent_history.get(name, [])
         if round_idx < len(history):
             rd = history[round_idx]
+            if pre_lateral:
+                return rd.get("response")
             return rd.get("lateral_response", rd.get("response"))
         return None
+
+    def group_texts(
+        members: list[str], round_idx: int, pre_lateral: bool = False
+    ) -> list[str]:
+        return [
+            t
+            for t in (round_text(m, round_idx, pre_lateral) for m in members)
+            if t is not None
+        ]
 
     def opt_round(value: Optional[float]) -> Optional[float]:
         return round(value, 3) if value is not None else None
@@ -92,25 +130,19 @@ def _compute_phase_analysis(
     for round_idx in range(len(rounds)):
         by_group: dict[str, Optional[float]] = {}
         for parent, members in sibling_groups.items():
-            texts = [
-                t for t in (round_text(m, round_idx) for m in members) if t is not None
-            ]
-            by_group[parent] = mean_pairwise_similarity(texts)
+            by_group[parent] = mean_pairwise_similarity(
+                group_texts(members, round_idx), similarity
+            )
 
         leaf_sims = [
             by_group[p] for p in leaf_group_parents if by_group.get(p) is not None
         ]
         mean_leaf = sum(leaf_sims) / len(leaf_sims) if leaf_sims else None
 
-        leaf_group_texts = []
-        for parent in leaf_group_parents:
-            texts = [
-                t
-                for t in (round_text(m, round_idx) for m in sibling_groups[parent])
-                if t is not None
-            ]
-            leaf_group_texts.append(texts)
-        cross = mean_cross_group_similarity(leaf_group_texts)
+        leaf_group_texts = [
+            group_texts(sibling_groups[p], round_idx) for p in leaf_group_parents
+        ]
+        cross = mean_cross_group_similarity(leaf_group_texts, similarity)
 
         mean_leaf_trajectory.append(mean_leaf)
         cross_group_trajectory.append(cross)
@@ -121,6 +153,24 @@ def _compute_phase_analysis(
             "mean_leaf_sibling_similarity": opt_round(mean_leaf),
             "cross_group_similarity": opt_round(cross),
         }
+
+    # Baseline: round-1 leaf sibling similarity BEFORE any lateral exchange —
+    # what siblings look like with no interaction. Final-minus-baseline is
+    # the net effect of the rounds on diversity.
+    baseline = None
+    if rounds:
+        baseline_sims = [
+            s
+            for s in (
+                mean_pairwise_similarity(
+                    group_texts(sibling_groups[p], 0, pre_lateral=True), similarity
+                )
+                for p in leaf_group_parents
+            )
+            if s is not None
+        ]
+        if baseline_sims:
+            baseline = sum(baseline_sims) / len(baseline_sims)
 
     # Agent stability: mean similarity of each non-root agent's consecutive
     # round texts. The root is excluded — its instability is what the
@@ -136,19 +186,30 @@ def _compute_phase_analysis(
             if t is not None
         ]
         if len(finals) >= 2:
-            per_agent = [
-                compute_jaccard_similarity(a, b) for a, b in zip(finals, finals[1:])
-            ]
+            per_agent = [similarity(a, b) for a, b in zip(finals, finals[1:])]
             stabilities.append(sum(per_agent) / len(per_agent))
     agent_stability = sum(stabilities) / len(stabilities) if stabilities else None
 
-    # Genuine convergence: the final root score met the threshold. The state's
-    # "converged" flag also goes True on the max_rounds cap, which must not
-    # count as convergence for phase classification.
-    threshold = config.get("convergence_threshold")
+    # Root round-over-round similarity under this method. For Jaccard this
+    # reproduces the loop's convergence_scores; for embeddings it is the
+    # paraphrase-aware version the loop cannot see.
+    root_texts = [
+        t for t in (round_text("L1N1", i) for i in range(len(rounds))) if t is not None
+    ]
+    root_trajectory = [similarity(a, b) for a, b in zip(root_texts, root_texts[1:])]
+
+    # Genuine convergence: the final root similarity met the method's
+    # threshold. The state's "converged" flag also goes True on the max_rounds
+    # cap, which must not count as convergence for phase classification.
+    conv_threshold = thresholds["convergence"]
+    if conv_threshold is None:
+        conv_threshold = config.get("convergence_threshold")
+        conv_scores = convergence_scores
+    else:
+        conv_scores = root_trajectory
     genuinely_converged = None
-    if convergence_scores and isinstance(threshold, (int, float)):
-        genuinely_converged = convergence_scores[-1] >= threshold
+    if conv_scores and isinstance(conv_threshold, (int, float)):
+        genuinely_converged = conv_scores[-1] >= conv_threshold
 
     final_sibling = next(
         (s for s in reversed(mean_leaf_trajectory) if s is not None), None
@@ -161,35 +222,80 @@ def _compute_phase_analysis(
     # re-deriving the phase from the report's numbers gets the same label.
     final_sibling_rounded = opt_round(final_sibling)
     agent_stability_rounded = opt_round(agent_stability)
+    baseline_rounded = opt_round(baseline)
+    final_minus_baseline = (
+        round(final_sibling_rounded - baseline_rounded, 3)
+        if final_sibling_rounded is not None and baseline_rounded is not None
+        else None
+    )
 
     return {
+        "similarity_method": method,
+        "thresholds": {
+            "mush": thresholds["mush"],
+            "stability": thresholds["stability"],
+            "convergence": conv_threshold,
+        },
         "mean_leaf_sibling_similarity_trajectory": [
             opt_round(s) for s in mean_leaf_trajectory
         ],
         "cross_group_similarity_trajectory": [
             opt_round(s) for s in cross_group_trajectory
         ],
+        "root_similarity_trajectory": [opt_round(s) for s in root_trajectory],
+        "baseline_sibling_similarity": baseline_rounded,
         "final_mean_leaf_sibling_similarity": final_sibling_rounded,
+        "final_minus_baseline": final_minus_baseline,
         "final_cross_group_similarity": opt_round(final_cross),
         "mean_agent_stability": agent_stability_rounded,
         "genuinely_converged": genuinely_converged,
         "phase_classification": classify_phase(
-            genuinely_converged, final_sibling_rounded, agent_stability_rounded
+            genuinely_converged,
+            final_sibling_rounded,
+            agent_stability_rounded,
+            mush_threshold=thresholds["mush"],
+            stability_threshold=thresholds["stability"],
         ),
     }
 
 
-def build_mca_report(result: dict, task: str, config: dict) -> dict:
+def build_mca_report(
+    result: dict,
+    task: str,
+    config: dict,
+    similarity_method: str = "jaccard",
+    embedder: Optional[Callable[[list[str]], list[list[float]]]] = None,
+) -> dict:
     """Build an MCA report from execution results.
 
     Args:
         result: The execution result state.
         task: The original task.
         config: Configuration parameters.
+        similarity_method: Similarity used for the phase metrics — "jaccard"
+            (token overlap, matches the convergence loop) or "embedding"
+            (cosine over text embeddings; sees through paraphrase). The
+            convergence loop itself is unaffected.
+        embedder: Optional batch embedding function for the "embedding"
+            method (texts -> vectors); defaults to OpenAI text-embedding-3-small.
 
     Returns:
         Report dictionary suitable for JSON serialization.
+
+    Raises:
+        ValueError: If similarity_method is not recognized.
     """
+    if similarity_method not in SIMILARITY_METHODS:
+        raise ValueError(
+            f"Unknown similarity method {similarity_method!r}; "
+            f"expected one of {SIMILARITY_METHODS}"
+        )
+    similarity: SimilarityFn
+    if similarity_method == "embedding":
+        similarity = EmbeddingSimilarity(embed_fn=embedder)
+    else:
+        similarity = compute_jaccard_similarity
+
     agent_history = result.get("agent_history", {})
     convergence_scores = result.get("convergence_scores", [])
 
@@ -243,7 +349,12 @@ def build_mca_report(result: dict, task: str, config: dict) -> dict:
     )
 
     phase_analysis = _compute_phase_analysis(
-        agent_history, config, convergence_scores, rounds
+        agent_history,
+        config,
+        convergence_scores,
+        rounds,
+        similarity=similarity,
+        method=similarity_method,
     )
 
     summary_metrics = {
@@ -285,6 +396,7 @@ def run_strange_mca(
     strange_loop_count: int = 0,
     domain_specific_instructions: str = "",
     lateral_pressure: str = "balanced",
+    similarity_method: str = "jaccard",
     log_level: str = "info",
     viz: bool = False,
     local_logs_only: bool = False,
@@ -306,6 +418,9 @@ def run_strange_mca(
         domain_specific_instructions: Domain-specific instructions for strange loop.
         lateral_pressure: How strongly lateral prompts push toward peer
             agreement — "maintain", "balanced", or "integrate".
+        similarity_method: Similarity for the report's phase metrics —
+            "jaccard" or "embedding" (report-side only; the convergence loop
+            always uses Jaccard).
         log_level: Logging level.
         viz: Generate visualizations.
         local_logs_only: Suppress dependency logs.
@@ -315,6 +430,17 @@ def run_strange_mca(
     Returns:
         The execution result dict.
     """
+    # Validate before any LLM calls are made.
+    if similarity_method not in SIMILARITY_METHODS:
+        raise ValueError(
+            f"Unknown similarity method {similarity_method!r}; "
+            f"expected one of {SIMILARITY_METHODS}"
+        )
+    if similarity_method == "embedding":
+        # Preflight the embedding client now (one tiny request) so a missing
+        # key or unreachable endpoint fails here, not after the paid run.
+        EmbeddingSimilarity().warm(["preflight"])
+
     # Set up logging
     numeric_level = getattr(logging, log_level.upper(), None)
     if not isinstance(numeric_level, int):
@@ -344,6 +470,7 @@ def run_strange_mca(
     logger.info(f"  Convergence threshold: {convergence_threshold}")
     logger.info(f"  Downward signals: {enable_downward_signals}")
     logger.info(f"  Lateral pressure: {lateral_pressure}")
+    logger.info(f"  Similarity method (report): {similarity_method}")
 
     num_agents = total_nodes(child_per_parent, depth)
     logger.info(f"Total agents: {num_agents}")
@@ -417,6 +544,7 @@ def run_strange_mca(
         "convergence_threshold": convergence_threshold,
         "enable_downward_signals": enable_downward_signals,
         "lateral_pressure": lateral_pressure,
+        "similarity_method": similarity_method,
         "perspectives": perspectives
         or [
             agents[n].config.perspective
@@ -424,17 +552,21 @@ def run_strange_mca(
             if agents[n].config.perspective
         ],
     }
-    report = build_mca_report(result, task, report_config)
+    # Save raw state FIRST so a failure while building the report (e.g. an
+    # embedding API error) can never lose a completed run; the report can be
+    # rebuilt from the state with scripts/rescore_report.py.
+    state_file = os.path.join(output_dir, "final_state.json")
+    with open(state_file, "w") as f:
+        json.dump(result, f, indent=2)
+
+    report = build_mca_report(
+        result, task, report_config, similarity_method=similarity_method
+    )
 
     report_file = os.path.join(output_dir, "mca_report.json")
     with open(report_file, "w") as f:
         json.dump(report, f, indent=2)
     logger.info(f"MCA report saved to {report_file}")
-
-    # Also save raw state
-    state_file = os.path.join(output_dir, "final_state.json")
-    with open(state_file, "w") as f:
-        json.dump(result, f, indent=2)
 
     return result
 

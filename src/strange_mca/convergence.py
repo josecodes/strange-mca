@@ -6,8 +6,29 @@ similarity, and phase classification) for evaluating which collective regime a
 run is in. See docs/topology-learnings.md for the theory behind the phases.
 """
 
+import math
 from itertools import combinations
-from typing import Optional
+from typing import Callable, Optional
+
+SimilarityFn = Callable[[str, str], float]
+
+SIMILARITY_METHODS = ("jaccard", "embedding")
+
+# Phase thresholds by similarity method. Jaccard values are the design doc's Q3
+# numbers. Embedding values (cosine over text-embedding-3-small) are PROVISIONAL
+# calibrations from three re-scored runs (see docs/experiment-log.md): cosine on
+# this model is compressed into a narrow high band for same-task prose —
+# independent responses from different perspectives already score ~0.93, and
+# same-content paraphrases ~0.95-0.98. Absolute thresholds are therefore
+# fragile; prefer the baseline-relative metrics (final_minus_baseline) and the
+# within- vs cross-group ordering when reading embedding reports.
+# "convergence" is the root round-over-round similarity that counts as genuine
+# convergence; None means "use the run's own convergence_threshold" (the
+# loop's Jaccard threshold).
+PHASE_THRESHOLDS = {
+    "jaccard": {"mush": 0.8, "stability": 0.8, "convergence": None},
+    "embedding": {"mush": 0.97, "stability": 0.95, "convergence": 0.95},
+}
 
 
 def compute_jaccard_similarity(text_a: str, text_b: str) -> float:
@@ -31,26 +52,102 @@ def compute_jaccard_similarity(text_a: str, text_b: str) -> float:
     return len(intersection) / len(union)
 
 
-def mean_pairwise_similarity(texts: list[str]) -> Optional[float]:
-    """Compute the mean pairwise Jaccard similarity within a group of texts.
+def cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
+    """Cosine similarity between two vectors (0.0 if either is all zeros)."""
+    dot = sum(a * b for a, b in zip(vec_a, vec_b))
+    norm_a = math.sqrt(sum(a * a for a in vec_a))
+    norm_b = math.sqrt(sum(b * b for b in vec_b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+class EmbeddingSimilarity:
+    """Cosine similarity between texts via cached embeddings.
+
+    Unlike Jaccard, this sees through paraphrase: two texts saying the same
+    thing in different words score high. Embeddings are cached per text, and
+    ``warm()`` embeds a whole batch in one call — call it with every text a
+    report will compare so the report costs one embedding request.
+
+    Args:
+        embed_fn: Callable mapping a list of texts to a list of vectors. If
+            None, a langchain ``OpenAIEmbeddings`` client is created lazily on
+            first use (reads OPENAI_API_KEY from the environment).
+        model: Embedding model name for the default client.
+    """
+
+    def __init__(
+        self,
+        embed_fn: Optional[Callable[[list[str]], list[list[float]]]] = None,
+        model: str = "text-embedding-3-small",
+    ):
+        self._embed_fn = embed_fn
+        self._model = model
+        self._cache: dict[str, list[float]] = {}
+
+    def _embedder(self) -> Callable[[list[str]], list[list[float]]]:
+        if self._embed_fn is None:
+            from langchain_openai import OpenAIEmbeddings
+
+            self._embed_fn = OpenAIEmbeddings(model=self._model).embed_documents
+        return self._embed_fn
+
+    def warm(self, texts: list[str]) -> None:
+        """Embed every uncached, non-blank text in a single batch call."""
+        missing = [
+            t for t in dict.fromkeys(texts) if t.strip() and t not in self._cache
+        ]
+        if not missing:
+            return
+        vectors = self._embedder()(missing)
+        if len(vectors) != len(missing):
+            raise RuntimeError(
+                f"Embedding function returned {len(vectors)} vectors for "
+                f"{len(missing)} texts"
+            )
+        for text, vector in zip(missing, vectors):
+            self._cache[text] = vector
+
+    def embed(self, text: str) -> list[float]:
+        if text not in self._cache:
+            self.warm([text])
+        return self._cache[text]
+
+    def __call__(self, text_a: str, text_b: str) -> float:
+        blank_a, blank_b = not text_a.strip(), not text_b.strip()
+        if blank_a and blank_b:
+            return 1.0
+        if blank_a or blank_b:
+            return 0.0
+        return cosine_similarity(self.embed(text_a), self.embed(text_b))
+
+
+def mean_pairwise_similarity(
+    texts: list[str], similarity: SimilarityFn = compute_jaccard_similarity
+) -> Optional[float]:
+    """Compute the mean pairwise similarity within a group of texts.
 
     Used as the intra-group order parameter: high values mean sibling agents
     are producing near-identical content (perspective diversity collapsing).
 
     Args:
         texts: The texts to compare.
+        similarity: Pairwise similarity function (default: Jaccard).
 
     Returns:
         Mean pairwise similarity, or None if fewer than 2 texts.
     """
     if len(texts) < 2:
         return None
-    scores = [compute_jaccard_similarity(a, b) for a, b in combinations(texts, 2)]
+    scores = [similarity(a, b) for a, b in combinations(texts, 2)]
     return sum(scores) / len(scores)
 
 
-def mean_cross_group_similarity(groups: list[list[str]]) -> Optional[float]:
-    """Compute the mean Jaccard similarity between members of different groups.
+def mean_cross_group_similarity(
+    groups: list[list[str]], similarity: SimilarityFn = compute_jaccard_similarity
+) -> Optional[float]:
+    """Compute the mean similarity between members of different groups.
 
     Used as the cross-group order parameter: low values mean sibling groups
     hold genuinely different positions (the mosaic the architecture targets),
@@ -58,6 +155,7 @@ def mean_cross_group_similarity(groups: list[list[str]]) -> Optional[float]:
 
     Args:
         groups: A list of groups, each a list of member texts.
+        similarity: Pairwise similarity function (default: Jaccard).
 
     Returns:
         Mean similarity over all inter-group text pairs, or None if fewer
@@ -70,7 +168,7 @@ def mean_cross_group_similarity(groups: list[list[str]]) -> Optional[float]:
     for group_a, group_b in combinations(non_empty, 2):
         for text_a in group_a:
             for text_b in group_b:
-                scores.append(compute_jaccard_similarity(text_a, text_b))
+                scores.append(similarity(text_a, text_b))
     return sum(scores) / len(scores)
 
 

@@ -106,6 +106,13 @@ def main():
         help="How strongly lateral prompts push agents toward peer agreement",
     )
     parser.add_argument(
+        "--similarity_method",
+        type=str,
+        choices=["jaccard", "embedding"],
+        default="jaccard",
+        help="Similarity used for the report's phase metrics (report-side only)",
+    )
+    parser.add_argument(
         "--log_level",
         type=str,
         default="info",
@@ -174,6 +181,7 @@ def main():
     logger.info(f"  Convergence threshold: {args.convergence_threshold}")
     logger.info(f"  Downward signals: {enable_downward_signals}")
     logger.info(f"  Lateral pressure: {args.lateral_pressure}")
+    logger.info(f"  Similarity method (report): {args.similarity_method}")
     logger.info(f"  Output directory: {output_dir}")
 
     num_agents = total_nodes(args.child_per_parent, args.depth)
@@ -204,6 +212,7 @@ def main():
         strange_loop_count=args.strange_loop_count,
         domain_specific_instructions=args.domain_specific_instructions,
         lateral_pressure=args.lateral_pressure,
+        similarity_method=args.similarity_method,
         log_level=args.log_level,
         viz=args.viz,
         local_logs_only=args.local_logs_only,

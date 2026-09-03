@@ -88,6 +88,7 @@ def test_main_function(
     mock_args.domain_specific_instructions = ""
     mock_args.strange_loop_count = 0
     mock_args.lateral_pressure = "integrate"
+    mock_args.similarity_method = "embedding"
     mock_parser.parse_args.return_value = mock_args
 
     mock_total_nodes.return_value = 4
@@ -114,6 +115,7 @@ def test_main_function(
     assert call_kwargs["max_rounds"] == 3
     assert call_kwargs["enable_downward_signals"] is True
     assert call_kwargs["lateral_pressure"] == "integrate"
+    assert call_kwargs["similarity_method"] == "embedding"
 
     mock_print.assert_any_call("\nFinal Response:")
     mock_print.assert_any_call("Test response")

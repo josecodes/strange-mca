@@ -224,3 +224,37 @@ def test_perspectives_list():
     assert "creative" in PERSPECTIVES
     assert "critical" in PERSPECTIVES
     assert "practical" in PERSPECTIVES
+
+
+# =============================================================================
+# Gateway routing Tests
+# =============================================================================
+
+
+def test_agent_default_routing_has_no_base_url(monkeypatch):
+    """Without MCA_CHAT_* variables the client gets only model and temperature."""
+    from unittest.mock import patch
+
+    monkeypatch.delenv("MCA_CHAT_BASE_URL", raising=False)
+    monkeypatch.delenv("MCA_CHAT_API_KEY", raising=False)
+    config = AgentConfig(name="L1N1", level=1, node_number=1, depth=2)
+    with patch("src.strange_mca.agents.ChatOpenAI") as mock_llm:
+        Agent(config, model_name="gpt-4o-mini")
+    mock_llm.assert_called_once_with(model="gpt-4o-mini", temperature=0.7)
+
+
+def test_agent_routes_through_gateway_env_vars(monkeypatch):
+    """MCA_CHAT_BASE_URL / MCA_CHAT_API_KEY are passed to the chat client."""
+    from unittest.mock import patch
+
+    monkeypatch.setenv("MCA_CHAT_BASE_URL", "http://gateway:4000")
+    monkeypatch.setenv("MCA_CHAT_API_KEY", "sk-test")
+    config = AgentConfig(name="L1N1", level=1, node_number=1, depth=2)
+    with patch("src.strange_mca.agents.ChatOpenAI") as mock_llm:
+        Agent(config, model_name="anthropic/claude-haiku-4-5")
+    mock_llm.assert_called_once_with(
+        model="anthropic/claude-haiku-4-5",
+        temperature=0.7,
+        base_url="http://gateway:4000",
+        api_key="sk-test",
+    )

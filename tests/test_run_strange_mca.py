@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, mock_open, patch
 
+import pytest
+
 from src.strange_mca.run_strange_mca import build_mca_report, run_strange_mca
 
 # =============================================================================
@@ -449,3 +451,157 @@ def test_build_mca_report_llm_call_counting():
     # L2N3: 1 (response) + 0 (revised=False) + 1 (signal_sent) = 2
     # Total: 1 + 2 + 1 + 2 = 6
     assert report["summary_metrics"]["total_llm_calls"] == 6
+
+
+# =============================================================================
+# Similarity method / baseline Tests
+# =============================================================================
+
+
+def _fake_embed(texts):
+    """2-d embedder: texts starting with 'a' -> x axis, otherwise -> y axis."""
+    return [
+        [1.0, 0.0] if t.strip().lower().startswith("a") else [0.0, 1.0] for t in texts
+    ]
+
+
+def test_build_mca_report_invalid_similarity_method():
+    """Unknown similarity method is rejected."""
+    with pytest.raises(ValueError, match="similarity method"):
+        build_mca_report({"agent_history": {}}, "Test", {}, similarity_method="tfidf")
+
+
+def test_build_mca_report_baseline_and_delta():
+    """Baseline is round-1 pre-lateral sibling similarity; delta is final minus it."""
+    result = {
+        "agent_history": {
+            "L1N1": [{"response": "root"}],
+            # Identical before lateral exchange (baseline 1.0), disjoint after
+            # (final 0.0): the rounds drove diversity UP by 1.0.
+            "L2N1": [{"response": "same words", "lateral_response": "alpha beta"}],
+            "L2N2": [{"response": "same words", "lateral_response": "gamma delta"}],
+        },
+        "convergence_scores": [],
+        "converged": False,
+        "final_response": "root",
+    }
+    config = {"cpp": 2, "depth": 2, "convergence_threshold": 0.85}
+    phase = build_mca_report(result, "Test", config)["summary_metrics"][
+        "phase_analysis"
+    ]
+
+    assert phase["similarity_method"] == "jaccard"
+    assert phase["baseline_sibling_similarity"] == 1.0
+    assert phase["final_mean_leaf_sibling_similarity"] == 0.0
+    assert phase["final_minus_baseline"] == -1.0
+    assert phase["thresholds"] == {"mush": 0.8, "stability": 0.8, "convergence": 0.85}
+
+
+def test_build_mca_report_embedding_method_sees_through_paraphrase():
+    """Embedding method scores paraphrases as similar where Jaccard sees 0."""
+    result = {
+        "agent_history": {
+            # Root 'paraphrases' itself: no shared tokens, same embedding direction
+            "L1N1": [{"response": "apple one"}, {"response": "avocado two"}],
+            "L2N1": [{"response": "apricot x"}, {"response": "almond y"}],
+            "L2N2": [{"response": "banana x"}, {"response": "berry y"}],
+        },
+        # The loop's Jaccard scores saw no convergence at all
+        "convergence_scores": [0.0],
+        "converged": True,
+        "final_response": "avocado two",
+    }
+    config = {"cpp": 2, "depth": 2, "convergence_threshold": 0.85}
+
+    jaccard = build_mca_report(result, "T", config)["summary_metrics"]["phase_analysis"]
+    embed = build_mca_report(
+        result, "T", config, similarity_method="embedding", embedder=_fake_embed
+    )["summary_metrics"]["phase_analysis"]
+
+    # Jaccard: root looks unstable, agents look unstable -> oscillating
+    assert jaccard["root_similarity_trajectory"] == [0.0]
+    assert jaccard["genuinely_converged"] is False
+    assert jaccard["phase_classification"] == "oscillating"
+
+    # Embedding: root paraphrase is recognized (cosine 1.0 >= 0.9), agents are
+    # stable, siblings are orthogonal (0.0 < 0.9) -> the target phase
+    assert embed["similarity_method"] == "embedding"
+    assert embed["thresholds"] == {"mush": 0.97, "stability": 0.95, "convergence": 0.95}
+    assert embed["root_similarity_trajectory"] == [1.0]
+    assert embed["genuinely_converged"] is True
+    assert embed["mean_agent_stability"] == 1.0
+    assert embed["final_mean_leaf_sibling_similarity"] == 0.0
+    assert embed["phase_classification"] == "converged_hierarchical"
+
+
+def test_build_mca_report_embedding_warms_once():
+    """The embedding method makes a single batch embedding call per report."""
+    calls = []
+
+    def counting_embed(texts):
+        calls.append(list(texts))
+        return _fake_embed(texts)
+
+    result = {
+        "agent_history": {
+            "L1N1": [{"response": "alpha root"}, {"response": "alpha root again"}],
+            "L2N1": [
+                {"response": "alpha a", "lateral_response": "alpha a2"},
+                {"response": "alpha a3"},
+            ],
+            "L2N2": [
+                {"response": "beta b", "lateral_response": "beta b2"},
+                {"response": "beta b3"},
+            ],
+        },
+        "convergence_scores": [0.5],
+        "converged": True,
+        "final_response": "x",
+    }
+    build_mca_report(
+        result,
+        "T",
+        {"cpp": 2, "depth": 2},
+        similarity_method="embedding",
+        embedder=counting_embed,
+    )
+    assert len(calls) == 1
+    assert sorted(calls[0]) == sorted(
+        [
+            "alpha root",
+            "alpha root again",
+            "alpha a",
+            "alpha a2",
+            "alpha a3",
+            "beta b",
+            "beta b2",
+            "beta b3",
+        ]
+    )
+
+
+@patch("src.strange_mca.run_strange_mca.create_output_dir")
+@patch("src.strange_mca.run_strange_mca.total_nodes")
+@patch("src.strange_mca.run_strange_mca.build_agent_tree")
+def test_run_strange_mca_rejects_bad_similarity_before_llm_calls(
+    mock_build_tree, mock_total_nodes, mock_create_dir
+):
+    """An invalid similarity method fails before any agents are built."""
+    with pytest.raises(ValueError, match="similarity method"):
+        run_strange_mca(task="Test", similarity_method="bogus")
+    mock_build_tree.assert_not_called()
+
+
+@patch("src.strange_mca.run_strange_mca.EmbeddingSimilarity")
+@patch("src.strange_mca.run_strange_mca.create_output_dir")
+@patch("src.strange_mca.run_strange_mca.total_nodes")
+@patch("src.strange_mca.run_strange_mca.build_agent_tree")
+def test_run_strange_mca_preflights_embeddings_before_llm_calls(
+    mock_build_tree, mock_total_nodes, mock_create_dir, mock_embedding_cls
+):
+    """With the embedding method, an unusable embedding client fails before agents exist."""
+    mock_embedding_cls.return_value.warm.side_effect = RuntimeError("no key")
+    with pytest.raises(RuntimeError, match="no key"):
+        run_strange_mca(task="Test", similarity_method="embedding")
+    mock_embedding_cls.return_value.warm.assert_called_once_with(["preflight"])
+    mock_build_tree.assert_not_called()
