@@ -48,7 +48,7 @@ The strange loop self-reflection occurs at finalization, after convergence.
 - **Strange Loop Refinement**: Optional self-critique and refinement of the final response at the root
 - **Lateral Pressure Control**: `--lateral_pressure` (maintain / balanced / integrate) sets how strongly lateral prompts push agents toward peer agreement — the coupling-strength dial from the theory
 - **Visualization Tools**: Generate visual representations of the agent tree and execution graph
-- **Observability Reports**: JSON reports (`mca_report.json`) with per-round agent data, convergence trajectory, LLM call counts, lateral revision rates, and phase metrics (sibling-group similarity, cross-group similarity, agent stability, and a phase classification: converged_hierarchical / converged_collapsed / stuck / oscillating, plus converged_unmeasured for topologies without sibling groups)
+- **Observability Reports**: JSON reports (`mca_report.json`) with per-round agent data, convergence trajectory, LLM call counts, lateral revision rates, and phase metrics (sibling-group similarity, cross-group similarity, agent stability, a round-1 no-interaction baseline, and a phase classification: converged_hierarchical / converged_collapsed / stuck / oscillating, plus converged_unmeasured for topologies without sibling groups). Metrics use Jaccard by default or, with `--similarity_method embedding`, text embeddings that see through paraphrase (report-side only; the convergence loop stays Jaccard)
 
 ## Installation
 
@@ -75,6 +75,8 @@ The strange loop self-reflection occurs at finalization, after convergence.
    OPENAI_API_KEY=your_api_key_here
    ```
 
+   Optionally, route the agents' chat calls through any OpenAI-compatible gateway (a LiteLLM proxy serving local or third-party models) by setting `MCA_CHAT_BASE_URL` and `MCA_CHAT_API_KEY` and passing the gateway's model name via `--model`. These are deliberately separate from the `OPENAI_*` variables so embeddings keep their default routing.
+
 ## Usage
 
 ### Running the Multi-Agent System
@@ -99,6 +101,7 @@ poetry run python -m src.strange_mca.main --task "Your task here" --child_per_pa
 | `--no_downward_signals` | — | Disable parent-to-child signals |
 | `--perspectives` | 8 defaults | Custom perspectives for leaf agents (space-separated) |
 | `--lateral_pressure` | `"balanced"` | How strongly lateral prompts push toward peer agreement (`maintain`, `balanced`, `integrate`) |
+| `--similarity_method` | `"jaccard"` | Similarity for the report's phase metrics (`jaccard`, `embedding`); report-side only |
 | `--strange_loop_count` | `0` | Number of strange loop iterations to perform |
 | `--domain_specific_instructions` | `""` | Domain-specific instructions for the strange loop prompt |
 | `--log_level` | `"info"` | Logging level (debug, info, warning, error, critical) |
@@ -125,6 +128,7 @@ result = run_strange_mca(
     enable_downward_signals=True,
     perspectives=None,  # uses 8 defaults
     lateral_pressure="balanced",  # or "maintain" / "integrate"
+    similarity_method="jaccard",  # or "embedding" (report-side only)
     strange_loop_count=1,
     domain_specific_instructions="Focus on practical applications",
 )
@@ -152,16 +156,16 @@ report = build_mca_report(result, task="...", config={...})
   - `agents.py`: `AgentConfig` (topology-aware), `Agent` (wraps ChatOpenAI), `build_agent_tree()`, `PERSPECTIVES`
   - `prompts.py`: MCA prompt functions (competency, initial response, lateral, observation, signal, strange loop)
   - `tree_helpers.py`: Pure functions for node naming, parent/child/sibling relationships, tree traversal
-  - `convergence.py`: Jaccard token similarity for convergence detection, plus phase metrics (group similarity, phase classification)
+  - `convergence.py`: Jaccard token similarity for convergence detection, plus phase metrics (group similarity, embedding similarity, phase classification)
   - `visualization.py`: Agent tree and execution graph visualization
   - `logging_utils.py`: Detailed logging utilities
-- `tests/`: Test suite (91 unit tests + 5 live integration tests)
+- `tests/`: Test suite (179 unit tests + 5 live integration tests)
   - `test_agents.py`, `test_graph.py`, `test_prompts.py`, `test_tree_helpers.py`, `test_convergence.py`: Unit tests for core modules
   - `test_main.py`, `test_run_strange_mca.py`, `test_visualization.py`: Integration tests
   - `test_emergent_properties.py`: Automated tests for emergent behavior properties
   - `test_live_integration.py`: Live tests requiring `OPENAI_API_KEY` (marked `@pytest.mark.live`)
-- `docs/`: Design documents, RFCs, and theory notes (`topology-learnings.md`)
-- `scripts/`: Linting and development scripts, plus `topology_experiment.py` for comparing topologies via phase metrics
+- `docs/`: Design documents and RFCs, theory notes (`topology-learnings.md`), the empirical record (`experiment-log.md`), and the next-phase handoff (`software-factory-handoff.md`)
+- `scripts/`: Linting and development scripts, plus `topology_experiment.py` (compare topologies and lateral-pressure settings via phase metrics) and `rescore_report.py` (re-analyze saved runs under another similarity method)
 - `output/`: Generated outputs, reports, and visualizations
 
 ## Testing
